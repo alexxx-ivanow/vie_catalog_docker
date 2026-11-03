@@ -1,0 +1,9 @@
+DROP TABLE IF EXISTS myapp_catalog_filter_index_queue;
+DROP TABLE IF EXISTS myapp_catalog_filter_index_job;
+DROP TABLE IF EXISTS myapp_catalog_filter_value;
+DROP TABLE IF EXISTS myapp_catalog_filter_product_section;
+DROP TABLE IF EXISTS myapp_catalog_filter_product;
+DROP TABLE IF EXISTS myapp_catalog_filter_index_meta;
+DROP TABLE IF EXISTS myapp_catalog_filter_rebuild_queue;
+DROP TABLE IF EXISTS myapp_catalog_filter_rebuild_job;
+DROP TABLE IF EXISTS myapp_catalog_filter_aggregate;

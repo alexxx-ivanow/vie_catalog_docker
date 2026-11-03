@@ -1,0 +1,32 @@
+<?php
+
+$MESS['MYAPP_CATALOG_FILTER_SNAPSHOTS_TITLE'] = 'Снапшоты фильтров каталога';
+$MESS['MYAPP_CATALOG_FILTER_AGENT_CRON_TITLE'] = 'Агенты Bitrix и cron';
+$MESS['MYAPP_CATALOG_FILTER_AGENT_CRON_BODY'] = 'Очередь снапшотов обрабатывает агент модуля myapp.catalog (регистрируется при установке/обновлении модуля). На продакшене включите выполнение агентов через cron в настройках продукта и настройте системный cron на обработчик Bitrix, например каждую минуту: php #DOCUMENT_ROOT#/bitrix/php_interface/cron_events.php. Без cron при малом трафике очередь может не обрабатываться. Проверьте запись агента в списке агентов. Дополнительно: CLI php #MODULE_ROOT#/tools/filter_rebuild_worker.php --batch=20';
+$MESS['MYAPP_CATALOG_FILTER_STATS_HEADING'] = 'Статистика';
+$MESS['MYAPP_CATALOG_FILTER_ACTIONS_HEADING'] = 'Действия';
+$MESS['MYAPP_CATALOG_FILTER_ERR_COL_SECTION'] = 'ID категории';
+$MESS['MYAPP_CATALOG_FILTER_ERR_COL_UPDATED'] = 'Обновлено';
+$MESS['MYAPP_CATALOG_FILTER_ERR_COL_ERROR'] = 'Ошибка';
+$MESS['MYAPP_CATALOG_FILTER_JOB_SECTION'] = 'текущая категория';
+$MESS['MYAPP_CATALOG_FILTER_STATS_SECTIONS'] = 'Всего категорий (активных)';
+$MESS['MYAPP_CATALOG_FILTER_STATS_SNAPSHOTS'] = 'Снапшотов создано';
+$MESS['MYAPP_CATALOG_FILTER_STATS_FRESH'] = 'Актуальных';
+$MESS['MYAPP_CATALOG_FILTER_STATS_STALE'] = 'Требуют обновления';
+$MESS['MYAPP_CATALOG_FILTER_STATS_QUEUE'] = 'В очереди';
+$MESS['MYAPP_CATALOG_FILTER_STATS_ERRORS'] = 'С ошибками построения';
+$MESS['MYAPP_CATALOG_FILTER_LAST_FILL'] = 'Последнее полное заполнение';
+$MESS['MYAPP_CATALOG_FILTER_BTN_FILL'] = 'Заполнить снапшоты';
+$MESS['MYAPP_CATALOG_FILTER_BTN_REBUILD_ALL'] = 'Обновить снапшоты';
+$MESS['MYAPP_CATALOG_FILTER_BTN_REBUILD_STALE'] = 'Обновить устаревшие';
+$MESS['MYAPP_CATALOG_FILTER_BTN_SECTION'] = 'Обновить категорию';
+$MESS['MYAPP_CATALOG_FILTER_BTN_CLEAR'] = 'Очистить снапшоты';
+$MESS['MYAPP_CATALOG_FILTER_BTN_CANCEL'] = 'Остановить задачу';
+$MESS['MYAPP_CATALOG_FILTER_SECTION_ID'] = 'ID категории';
+$MESS['MYAPP_CATALOG_FILTER_JOB_RUNNING'] = 'Выполняется задача';
+$MESS['MYAPP_CATALOG_FILTER_JOB_PROGRESS'] = 'Прогресс';
+$MESS['MYAPP_CATALOG_FILTER_ERRORS_TITLE'] = 'Последние ошибки';
+$MESS['MYAPP_CATALOG_FILTER_CONFIRM_CLEAR'] = 'Удалить все снапшоты и очередь? Это действие необратимо.';
+$MESS['MYAPP_CATALOG_FILTER_SAVED'] = 'Действие выполнено';
+$MESS['MYAPP_CATALOG_FILTER_ERR'] = 'Ошибка';
+$MESS['MYAPP_CATALOG_FILTER_JOB_KEEP_TAB'] = 'Идёт фоновая задача. Можно оставить вкладку открытой — прогресс обновляется автоматически. На продакшене очередь также обрабатывает cron.';

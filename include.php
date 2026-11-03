@@ -1,0 +1,55 @@
+<?php
+
+use Bitrix\Main\Loader;
+
+Loader::registerAutoLoadClasses('myapp.catalog', [
+    'MyApp\\Catalog\\Controller\\BasePageController' => 'lib/Controller/BasePageController.php',
+    'MyApp\\Catalog\\Controller\\HomeController' => 'lib/Controller/HomeController.php',
+    'MyApp\\Catalog\\Controller\\CatalogController' => 'lib/Controller/CatalogController.php',
+    'MyApp\\Catalog\\Controller\\ProductController' => 'lib/Controller/ProductController.php',
+    'MyApp\\Catalog\\Controller\\CartController' => 'lib/Controller/CartController.php',
+    'MyApp\\Catalog\\Controller\\ApiController' => 'lib/Controller/ApiController.php',
+    'MyApp\\Catalog\\Controller\\CheckoutApiController' => 'lib/Controller/CheckoutApiController.php',
+    'MyApp\\Catalog\\Controller\\OrderController' => 'lib/Controller/OrderController.php',
+    'MyApp\\Catalog\\Controller\\OrderSuccessController' => 'lib/Controller/OrderSuccessController.php',
+    'MyApp\\Catalog\\Controller\\OrderPaymentController' => 'lib/Controller/OrderPaymentController.php',
+    'MyApp\\Catalog\\Controller\\PersonalController' => 'lib/Controller/PersonalController.php',
+    'MyApp\\Catalog\\Controller\\AuthPageController' => 'lib/Controller/AuthPageController.php',
+    'MyApp\\Catalog\\Controller\\AccountApiController' => 'lib/Controller/AccountApiController.php',
+    'MyApp\\Catalog\\Service\\CheckoutService' => 'lib/Service/CheckoutService.php',
+    'MyApp\\Catalog\\Checkout\\DeliveryUiResolver' => 'lib/Checkout/DeliveryUiResolver.php',
+    'MyApp\\Catalog\\Service\\CheckoutUserService' => 'lib/Service/CheckoutUserService.php',
+    'MyApp\\Catalog\\Service\\HomeService' => 'lib/Service/HomeService.php',
+    'MyApp\\Catalog\\Service\\CatalogService' => 'lib/Service/CatalogService.php',
+    'MyApp\\Catalog\\Service\\CartService' => 'lib/Service/CartService.php',
+    'MyApp\\Catalog\\Service\\AccountService' => 'lib/Service/AccountService.php',
+    'MyApp\\Catalog\\Service\\PersonalOrderService' => 'lib/Service/PersonalOrderService.php',
+    'MyApp\\Catalog\\Routing\\WebRoutes' => 'lib/Routing/WebRoutes.php',
+    'MyApp\\Catalog\\Config\\Assets' => 'lib/Config/Assets.php',
+    'MyApp\\Catalog\\Config\\Templates' => 'lib/Config/Templates.php',
+    'MyApp\\Catalog\\Event\\CatalogCacheHandler' => 'lib/Event/CatalogCacheHandler.php',
+    'MyApp\\Catalog\\Install\\FilterAggregateSchema' => 'lib/Install/FilterAggregateSchema.php',
+    'MyApp\\Catalog\\Model\\FilterAggregateTable' => 'lib/Model/FilterAggregateTable.php',
+    'MyApp\\Catalog\\Model\\FilterRebuildQueueTable' => 'lib/Model/FilterRebuildQueueTable.php',
+    'MyApp\\Catalog\\Model\\FilterRebuildJobTable' => 'lib/Model/FilterRebuildJobTable.php',
+    'MyApp\\Catalog\\Service\\FilterAggregateService' => 'lib/Service/FilterAggregateService.php',
+    'MyApp\\Catalog\\Service\\FilterRebuildQueueService' => 'lib/Service/FilterRebuildQueueService.php',
+    'MyApp\\Catalog\\Service\\FilterRebuildJobService' => 'lib/Service/FilterRebuildJobService.php',
+    'MyApp\\Catalog\\Install\\ProductFilterIndexSchema' => 'lib/Install/ProductFilterIndexSchema.php',
+    'MyApp\\Catalog\\Model\\FilterIndexProductTable' => 'lib/Model/FilterIndexProductTable.php',
+    'MyApp\\Catalog\\Model\\FilterIndexProductSectionTable' => 'lib/Model/FilterIndexProductSectionTable.php',
+    'MyApp\\Catalog\\Model\\FilterIndexValueTable' => 'lib/Model/FilterIndexValueTable.php',
+    'MyApp\\Catalog\\Model\\FilterIndexMetaTable' => 'lib/Model/FilterIndexMetaTable.php',
+    'MyApp\\Catalog\\Model\\FilterIndexQueueTable' => 'lib/Model/FilterIndexQueueTable.php',
+    'MyApp\\Catalog\\Model\\FilterIndexJobTable' => 'lib/Model/FilterIndexJobTable.php',
+    'MyApp\\Catalog\\Service\\ProductFilterIndexQueueService' => 'lib/Service/ProductFilterIndexQueueService.php',
+    'MyApp\\Catalog\\Service\\ProductFilterIndexService' => 'lib/Service/ProductFilterIndexService.php',
+    'MyApp\\Catalog\\Service\\ProductFilterIndexJobService' => 'lib/Service/ProductFilterIndexJobService.php',
+    'MyApp\\Catalog\\Service\\ProductFilterQueryService' => 'lib/Service/ProductFilterQueryService.php',
+]);
+
+\MyApp\Catalog\Event\CatalogCacheHandler::ensurePersistentHandlers();
+\MyApp\Catalog\Install\FilterAggregateSchema::ensureRebuildInfrastructure();
+\MyApp\Catalog\Install\ProductFilterIndexSchema::ensureInfrastructure();
+\MyApp\Catalog\Service\FilterRebuildJobService::ensureAgentRegistered();
+\MyApp\Catalog\Service\ProductFilterIndexJobService::ensureAgentRegistered();
