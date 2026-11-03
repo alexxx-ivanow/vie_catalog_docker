@@ -6,6 +6,7 @@ use Bitrix\Main\Config\Option;
 use Bitrix\Main\EventManager;
 use Bitrix\Main\Loader;
 use Bitrix\Iblock\ElementTable;
+use Bitrix\Iblock\SectionTable;
 use MyApp\Catalog\Config\Assets;
 use MyApp\Catalog\Service\ProductFilterIndexService;
 use MyApp\Catalog\Service\CatalogService;
@@ -18,6 +19,8 @@ final class CatalogCacheHandler
 
     private const OPT_HANDLERS_V2 = 'catalog_cache_handlers_v2';
 
+    private const OPT_HANDLERS_V3 = 'catalog_cache_handlers_v3';
+
     /** @var array<int, list<int>> */
     private static array $elementSectionsBeforeUpdate = [];
 
@@ -26,7 +29,9 @@ final class CatalogCacheHandler
 
     public static function ensurePersistentHandlers(): void
     {
-        if (Option::get(self::MODULE_ID, self::OPT_HANDLERS_V2, 'N') === 'Y') {
+        self::unregisterLegacyEventHandlers();
+
+        if (Option::get(self::MODULE_ID, self::OPT_HANDLERS_V3, 'N') === 'Y') {
             return;
         }
 
@@ -37,6 +42,7 @@ final class CatalogCacheHandler
         self::installPersistentHandlers();
         Option::set(self::MODULE_ID, self::OPT_HANDLERS_INSTALLED, 'Y');
         Option::set(self::MODULE_ID, self::OPT_HANDLERS_V2, 'Y');
+        Option::set(self::MODULE_ID, self::OPT_HANDLERS_V3, 'Y');
     }
 
     public static function installPersistentHandlers(): void
@@ -45,7 +51,7 @@ final class CatalogCacheHandler
         $class = self::class;
 
         $manager->registerEventHandler('iblock', 'OnBeforeIBlockElementUpdate', self::MODULE_ID, $class, 'onBeforeElementUpdate');
-        $manager->registerEventHandler('iblock', 'OnBeforeIBlockElementDelete', self::MODULE_ID, $class, 'onBeforeElementUpdate');
+        $manager->registerEventHandler('iblock', 'OnBeforeIBlockElementDelete', self::MODULE_ID, $class, 'onBeforeElementDelete');
         $manager->registerEventHandler('iblock', 'OnAfterIBlockElementAdd', self::MODULE_ID, $class, 'onAfterElementChange');
         $manager->registerEventHandler('iblock', 'OnAfterIBlockElementUpdate', self::MODULE_ID, $class, 'onAfterElementUpdate');
         $manager->registerEventHandler('iblock', 'OnAfterIBlockElementDelete', self::MODULE_ID, $class, 'onAfterElementDelete');
@@ -58,7 +64,7 @@ final class CatalogCacheHandler
         );
 
         $manager->registerEventHandler('iblock', 'OnBeforeIBlockSectionUpdate', self::MODULE_ID, $class, 'onBeforeSectionChange');
-        $manager->registerEventHandler('iblock', 'OnBeforeIBlockSectionDelete', self::MODULE_ID, $class, 'onBeforeSectionChange');
+        $manager->registerEventHandler('iblock', 'OnBeforeIBlockSectionDelete', self::MODULE_ID, $class, 'onBeforeSectionDelete');
         $manager->registerEventHandler('iblock', 'OnAfterIBlockSectionAdd', self::MODULE_ID, $class, 'onAfterSectionChange');
         $manager->registerEventHandler('iblock', 'OnAfterIBlockSectionUpdate', self::MODULE_ID, $class, 'onAfterSectionUpdate');
         $manager->registerEventHandler('iblock', 'OnAfterIBlockSectionDelete', self::MODULE_ID, $class, 'onAfterSectionDelete');
@@ -73,8 +79,10 @@ final class CatalogCacheHandler
         $manager = EventManager::getInstance();
         $class = self::class;
 
+        self::unregisterLegacyEventHandlers();
+
         $manager->unRegisterEventHandler('iblock', 'OnBeforeIBlockElementUpdate', self::MODULE_ID, $class, 'onBeforeElementUpdate');
-        $manager->unRegisterEventHandler('iblock', 'OnBeforeIBlockElementDelete', self::MODULE_ID, $class, 'onBeforeElementUpdate');
+        $manager->unRegisterEventHandler('iblock', 'OnBeforeIBlockElementDelete', self::MODULE_ID, $class, 'onBeforeElementDelete');
         $manager->unRegisterEventHandler('iblock', 'OnAfterIBlockElementAdd', self::MODULE_ID, $class, 'onAfterElementChange');
         $manager->unRegisterEventHandler('iblock', 'OnAfterIBlockElementUpdate', self::MODULE_ID, $class, 'onAfterElementUpdate');
         $manager->unRegisterEventHandler('iblock', 'OnAfterIBlockElementDelete', self::MODULE_ID, $class, 'onAfterElementDelete');
@@ -87,7 +95,7 @@ final class CatalogCacheHandler
         );
 
         $manager->unRegisterEventHandler('iblock', 'OnBeforeIBlockSectionUpdate', self::MODULE_ID, $class, 'onBeforeSectionChange');
-        $manager->unRegisterEventHandler('iblock', 'OnBeforeIBlockSectionDelete', self::MODULE_ID, $class, 'onBeforeSectionChange');
+        $manager->unRegisterEventHandler('iblock', 'OnBeforeIBlockSectionDelete', self::MODULE_ID, $class, 'onBeforeSectionDelete');
         $manager->unRegisterEventHandler('iblock', 'OnAfterIBlockSectionAdd', self::MODULE_ID, $class, 'onAfterSectionChange');
         $manager->unRegisterEventHandler('iblock', 'OnAfterIBlockSectionUpdate', self::MODULE_ID, $class, 'onAfterSectionUpdate');
         $manager->unRegisterEventHandler('iblock', 'OnAfterIBlockSectionDelete', self::MODULE_ID, $class, 'onAfterSectionDelete');
@@ -98,6 +106,32 @@ final class CatalogCacheHandler
 
         Option::delete(self::MODULE_ID, ['name' => self::OPT_HANDLERS_INSTALLED]);
         Option::delete(self::MODULE_ID, ['name' => self::OPT_HANDLERS_V2]);
+        Option::delete(self::MODULE_ID, ['name' => self::OPT_HANDLERS_V3]);
+    }
+
+    /**
+     * Ранее OnBefore*Delete вешали на те же методы, что и Update (массив полей).
+     * Delete передаёт только ID — такие записи ломают удаление, если остались в b_module_to_module.
+     */
+    private static function unregisterLegacyEventHandlers(): void
+    {
+        $manager = EventManager::getInstance();
+        $class = self::class;
+
+        $manager->unRegisterEventHandler(
+            'iblock',
+            'OnBeforeIBlockElementDelete',
+            self::MODULE_ID,
+            $class,
+            'onBeforeElementUpdate'
+        );
+        $manager->unRegisterEventHandler(
+            'iblock',
+            'OnBeforeIBlockSectionDelete',
+            self::MODULE_ID,
+            $class,
+            'onBeforeSectionChange'
+        );
     }
 
     public static function onBeforeElementUpdate(array &$fields): void
@@ -111,7 +145,21 @@ final class CatalogCacheHandler
             return;
         }
 
-        self::$elementSectionsBeforeUpdate[$elementId] = CatalogService::getElementSectionIds($elementId);
+        self::rememberElementSectionsBeforeChange($elementId);
+    }
+
+    public static function onBeforeElementDelete(int $elementId): void
+    {
+        $elementId = (int)$elementId;
+        if ($elementId <= 0) {
+            return;
+        }
+
+        if (!self::isCatalogElementFields(['ID' => $elementId])) {
+            return;
+        }
+
+        self::rememberElementSectionsBeforeChange($elementId);
     }
 
     public static function onAfterElementChange(array &$fields): void
@@ -197,7 +245,21 @@ final class CatalogCacheHandler
             return;
         }
 
-        self::$sectionPathBeforeUpdate[$sectionId] = CatalogService::getSectionPathIds($sectionId);
+        self::rememberSectionPathBeforeChange($sectionId);
+    }
+
+    public static function onBeforeSectionDelete(int $sectionId): void
+    {
+        $sectionId = (int)$sectionId;
+        if ($sectionId <= 0) {
+            return;
+        }
+
+        if (!self::isCatalogIblock(self::resolveIblockIdFromSectionId($sectionId))) {
+            return;
+        }
+
+        self::rememberSectionPathBeforeChange($sectionId);
     }
 
     public static function onAfterSectionChange(array &$fields): void
@@ -315,9 +377,38 @@ final class CatalogCacheHandler
         return false;
     }
 
+    private static function rememberElementSectionsBeforeChange(int $elementId): void
+    {
+        self::$elementSectionsBeforeUpdate[$elementId] = CatalogService::getElementSectionIds($elementId);
+    }
+
+    private static function rememberSectionPathBeforeChange(int $sectionId): void
+    {
+        self::$sectionPathBeforeUpdate[$sectionId] = CatalogService::getSectionPathIds($sectionId);
+    }
+
     private static function isCatalogIblock(int $iblockId): bool
     {
         return $iblockId > 0 && $iblockId === Assets::catalogIblockId();
+    }
+
+    private static function resolveIblockIdFromSectionId(int $sectionId): int
+    {
+        if ($sectionId <= 0) {
+            return 0;
+        }
+
+        if (!Loader::includeModule('iblock')) {
+            return 0;
+        }
+
+        $row = SectionTable::getList([
+            'select' => ['IBLOCK_ID'],
+            'filter' => ['=ID' => $sectionId],
+            'limit' => 1,
+        ])->fetch();
+
+        return (int)($row['IBLOCK_ID'] ?? 0);
     }
 
     private static function isCatalogElementFields(array $fields): bool

@@ -105,6 +105,9 @@ export default {
                     setTimeout(() => {
                         this.added = false;
                     }, 2000);
+                } else {
+                    this.added = false;
+                    alert(data.error);
                 }
             } catch (error) {
                 console.log('Ошибка добавления товара: ', error);
