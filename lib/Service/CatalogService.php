@@ -88,22 +88,78 @@ class CatalogService
     }
 
     // Карточка товара
-    public static function getProduct(int $id): ?array
+    public static function getProduct(int $id, ?int $uid = null): ?array
     {
         $id = (int)$id;
         if ($id <= 0) {
             return null;
         }
 
+        $base = self::loadProductBaseCached($id);
+        if ($base === null) {
+            return null;
+        }
+
+        return self::applySkuPresentation($base, $uid);
+    }
+
+    /**
+     * Загрузка карточки по ID позиции каталога (родитель или оффер).
+     *
+     * @return array<string, mixed>|null
+     */
+    public static function getProductForCatalogItem(int $catalogItemId): ?array
+    {
+        $catalogItemId = (int)$catalogItemId;
+        if ($catalogItemId <= 0) {
+            return null;
+        }
+
+        $parentId = CatalogSkuService::resolveParentIdFromOffer($catalogItemId);
+        if ($parentId > 0 && $parentId !== $catalogItemId) {
+            $product = self::getProduct($parentId, $catalogItemId);
+            if ($product !== null) {
+                $product['PARENT_ID'] = $parentId;
+                $product['OFFER_ID'] = $catalogItemId;
+            }
+
+            return $product;
+        }
+
+        return self::getProduct($catalogItemId);
+    }
+
+    public static function resolveFilePathPublic(?int $fileId): string
+    {
+        if (!$fileId) {
+            return Assets::NO_PHOTO_IMAGE;
+        }
+
+        $path = self::getFilePath($fileId);
+
+        return $path !== '' ? $path : Assets::NO_PHOTO_IMAGE;
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private static function loadProductBaseCached(int $id): ?array
+    {
         $skipCache = self::shouldSkipCache();
+        $skuSuffix = '';
+        if (CatalogSkuService::getOffersIblockId() > 0) {
+            $skuSuffix = '_sku' . CatalogSkuService::getOffersIblockId() . '_v3';
+        }
         $cacheKey = 'product_' . $id
             . '_g' . self::catalogPriceGroupId()
             . '_c' . self::catalogDisplayCurrency()
             . '_p' . md5(implode(',', Assets::cardPropertyCodes()))
-            . '_a' . md5(Assets::catalogArticlePropertyCode());
+            . '_a' . md5(Assets::catalogArticlePropertyCode())
+            . $skuSuffix;
         $cache = \Bitrix\Main\Data\Cache::createInstance();
         if (!$skipCache && $cache->initCache(Assets::catalogCacheTtl(), $cacheKey, self::CACHE_DIR_PRODUCT)) {
             $cached = $cache->getVars();
+
             return is_array($cached) && array_key_exists('product', $cached)
                 ? $cached['product']
                 : null;
@@ -128,13 +184,12 @@ class CatalogService
                     $productCacheStarted
                 );
             }
+
             return null;
         }
 
-        $result['PRICE'] = self::getPrice($id);
-        $result['CURRENCY'] = self::catalogDisplayCurrency();
         if ($result['DETAIL_PICTURE']) {
-            $result['DETAIL_PICTURE'] = self::getFilePath($result['DETAIL_PICTURE']);
+            $result['DETAIL_PICTURE'] = self::getFilePath((int)$result['DETAIL_PICTURE']);
         } else {
             $result['DETAIL_PICTURE'] = Assets::NO_PHOTO_IMAGE;
         }
@@ -147,13 +202,28 @@ class CatalogService
             $properties,
             static fn(array $property): bool => strtoupper((string)($property['code'] ?? '')) !== $articleCodeUpper
         ));
-        $result['ARTICLE'] = self::extractPropertyValueByCode(
-            $properties,
-            $articlePropertyCode
-        );
         $section = self::getMainSectionForProduct($id);
         $result['SECTION_ID'] = (int)($section['ID'] ?? 0);
         $result['SECTION_NAME'] = (string)($section['NAME'] ?? '');
+
+        $hasOffers = CatalogSkuService::isSkuProduct($id);
+        $result['hasOffers'] = $hasOffers;
+
+        if ($hasOffers) {
+            $skuPayload = CatalogSkuService::buildSkuPayload($id);
+            $result['sku'] = [
+                'tree' => $skuPayload['tree'],
+                'offers' => $skuPayload['offers'],
+                'defaultOfferId' => $skuPayload['defaultOfferId'],
+            ];
+            $result['PRICE'] = 0.0;
+            $result['ARTICLE'] = '';
+        } else {
+            $result['sku'] = null;
+            $result['PRICE'] = self::getPrice($id);
+            $result['ARTICLE'] = self::extractPropertyValueByCode($properties, $articlePropertyCode);
+        }
+        $result['CURRENCY'] = self::catalogDisplayCurrency();
 
         if (!$skipCache) {
             self::commitTaggedDataCache(
@@ -168,8 +238,41 @@ class CatalogService
         return $result;
     }
 
+    /**
+     * @param array<string, mixed> $product
+     * @return array<string, mixed>
+     */
+    private static function applySkuPresentation(array $product, ?int $uid): array
+    {
+        if (empty($product['hasOffers']) || !is_array($product['sku'] ?? null)) {
+            $product['activeOfferId'] = 0;
+            $product['selectedSkuProps'] = new \stdClass();
 
-    // Список товаров с фильтром и пагинацией
+            return $product;
+        }
+
+        $offers = is_array($product['sku']['offers'] ?? null) ? $product['sku']['offers'] : [];
+        $parentId = (int)$product['ID'];
+        $activeOfferId = CatalogSkuService::resolveActiveOfferId($parentId, $uid);
+        $product['activeOfferId'] = $activeOfferId;
+        $selectedProps = CatalogSkuService::selectedSkuPropsFromOffer($offers, $activeOfferId);
+        $product['selectedSkuProps'] = $selectedProps === [] ? new \stdClass() : $selectedProps;
+
+        foreach ($offers as $offer) {
+            if ((int)($offer['id'] ?? 0) !== $activeOfferId) {
+                continue;
+            }
+            $product['PRICE'] = (float)($offer['price'] ?? 0);
+            $product['ARTICLE'] = (string)($offer['article'] ?? '');
+            if (!empty($offer['picture'])) {
+                $product['DETAIL_PICTURE'] = (string)$offer['picture'];
+            }
+            break;
+        }
+
+        return $product;
+    }
+
     public static function getGoods(
         array $filter    = [],
         int   $page      = 1,
@@ -337,11 +440,49 @@ class CatalogService
             $rawProperties = is_array($filter['properties'] ?? null) ? $filter['properties'] : [];
             $selectedProperties = self::normalizeSelectedProperties($rawProperties);
             foreach ($selectedProperties as $index => $selected) {
-                $alias = 'p_filter_' . $index;
                 $propertyId = (int)$selected['def']['ID'];
+                if ($propertyId <= 0) {
+                    continue;
+                }
+
+                if (!empty($selected['def']['offersIblock'])) {
+                    $offersIblockId = CatalogSkuService::getOffersIblockId();
+                    $linkPropId = CatalogSkuService::getLinkPropertyId();
+                    if ($offersIblockId <= 0 || $linkPropId <= 0) {
+                        continue;
+                    }
+                    $offerProp = 'p_offer_f_' . $index;
+                    if ($selected['def']['valueKind'] === 'enum') {
+                        $idsSql = implode(',', array_map('intval', $selected['values']));
+                        $valueSql = "({$offerProp}.VALUE_ENUM IN ({$idsSql}) OR {$offerProp}.VALUE IN ({$idsSql}))";
+                    } else {
+                        $valuesSql = implode(',', array_map(
+                            static fn(string $value): string => "'" . $sqlHelper->forSql($value) . "'",
+                            $selected['values']
+                        ));
+                        $valueSql = "{$offerProp}.VALUE IN ({$valuesSql})";
+                    }
+                    $whereParts[] = "EXISTS (
+                        SELECT 1
+                        FROM b_iblock_element_property lp_offer_f_{$index}
+                        INNER JOIN b_iblock_element o_offer_f_{$index}
+                            ON o_offer_f_{$index}.ID = lp_offer_f_{$index}.IBLOCK_ELEMENT_ID
+                           AND o_offer_f_{$index}.IBLOCK_ID = {$offersIblockId}
+                           AND o_offer_f_{$index}.ACTIVE = 'Y'
+                        INNER JOIN b_iblock_element_property {$offerProp}
+                            ON {$offerProp}.IBLOCK_ELEMENT_ID = o_offer_f_{$index}.ID
+                           AND {$offerProp}.IBLOCK_PROPERTY_ID = {$propertyId}
+                           AND {$valueSql}
+                        WHERE lp_offer_f_{$index}.IBLOCK_PROPERTY_ID = {$linkPropId}
+                          AND lp_offer_f_{$index}.VALUE = e.ID
+                    )";
+                    continue;
+                }
+
+                $alias = 'p_filter_' . $index;
                 if ($selected['def']['valueKind'] === 'enum') {
                     $idsSql = implode(',', array_map('intval', $selected['values']));
-                    $valueSql = "{$alias}.VALUE_ENUM IN ({$idsSql})";
+                    $valueSql = "({$alias}.VALUE_ENUM IN ({$idsSql}) OR {$alias}.VALUE IN ({$idsSql}))";
                 } else {
                     $valuesSql = implode(',', array_map(
                         static fn(string $value): string => "'" . $sqlHelper->forSql($value) . "'",
@@ -541,10 +682,9 @@ class CatalogService
             $item['DETAIL_PICTURE'] = $detailPictureId > 0
                 ? ($pictureMap[$detailPictureId] ?? Assets::NO_PHOTO_IMAGE)
                 : Assets::NO_PHOTO_IMAGE;
-            $item['PRICE'] = $prices[$id] ?? 0.0;
-            $item['CURRENCY'] = self::catalogDisplayCurrency();
         }
         unset($item);
+        self::applySkuPricingToListItems($items, $prices);
 
         $result = [
             'items' => $items,
@@ -875,8 +1015,37 @@ class CatalogService
             self::iblockId()
             . '|' . self::catalogPriceGroupId()
             . '|' . self::catalogDisplayCurrency()
-            . '|' . implode("\n", Assets::filterPropertyCodes())
+            . '|' . implode("\n", self::effectiveFilterPropertyCodes())
         );
+    }
+
+    /**
+     * Коды свойств фильтра: «Свойства в фильтре» + коды SKU-tree (офферы), без дубликатов.
+     *
+     * @return list<string>
+     */
+    public static function effectiveFilterPropertyCodes(): array
+    {
+        static $cache = null;
+        if ($cache !== null) {
+            return $cache;
+        }
+
+        $codes = Assets::filterPropertyCodes();
+        foreach (CatalogSkuService::skuPropertyCodes() as $code) {
+            $exists = false;
+            foreach ($codes as $existing) {
+                if (strcasecmp((string)$existing, (string)$code) === 0) {
+                    $exists = true;
+                    break;
+                }
+            }
+            if (!$exists) {
+                $codes[] = $code;
+            }
+        }
+
+        return $cache = Assets::normalizePropertyCodes($codes);
     }
 
     /**
@@ -1000,7 +1169,8 @@ class CatalogService
                 $code = preg_replace('/[^A-Za-z0-9_]/', '_', (string)$definition['CODE']) ?: 'prop';
 
                 if ($definition['valueKind'] === 'enum') {
-                    $propsSql = "
+                    if (empty($definition['offersIblock'])) {
+                        $propsSql = "
                         SELECT DISTINCT p.VALUE_ENUM AS VALUE_ENUM
                         {$scopeFrom}
                         INNER JOIN b_iblock_element_property p
@@ -1010,11 +1180,41 @@ class CatalogService
                           AND p.VALUE_ENUM IS NOT NULL
                           AND p.VALUE_ENUM > 0
                     ";
-                    $res = self::queryWithPerf($db, $propsSql, $perfForQueries, 'filters_prop_' . $code);
-                    while ($row = $res->fetch()) {
-                        $enumId = (int)$row['VALUE_ENUM'];
-                        if ($enumId > 0) {
-                            $enumIdsByProp[$propertyId][$enumId] = true;
+                        $res = self::queryWithPerf($db, $propsSql, $perfForQueries, 'filters_prop_' . $code);
+                        while ($row = $res->fetch()) {
+                            $enumId = (int)$row['VALUE_ENUM'];
+                            if ($enumId > 0) {
+                                $enumIdsByProp[$propertyId][$enumId] = true;
+                            }
+                        }
+                    }
+
+                    $offersIblockId = CatalogSkuService::getOffersIblockId();
+                    $linkPropId = CatalogSkuService::getLinkPropertyId();
+                    if (!empty($definition['offersIblock']) && $offersIblockId > 0 && $linkPropId > 0) {
+                        $offerSql = "
+                            SELECT DISTINCT p.VALUE_ENUM AS VALUE_ENUM
+                            {$scopeFrom}
+                            INNER JOIN b_iblock_element_property lp
+                                ON lp.IBLOCK_PROPERTY_ID = {$linkPropId}
+                               AND lp.VALUE = e.ID
+                            INNER JOIN b_iblock_element o
+                                ON o.ID = lp.IBLOCK_ELEMENT_ID
+                               AND o.IBLOCK_ID = {$offersIblockId}
+                               AND o.ACTIVE = 'Y'
+                            INNER JOIN b_iblock_element_property p
+                                ON p.IBLOCK_ELEMENT_ID = o.ID
+                               AND p.IBLOCK_PROPERTY_ID = {$propertyId}
+                            WHERE {$scopeWhere}
+                              AND p.VALUE_ENUM IS NOT NULL
+                              AND p.VALUE_ENUM > 0
+                        ";
+                        $resOffer = self::queryWithPerf($db, $offerSql, $perfForQueries, 'filters_prop_offer_' . $code);
+                        while ($row = $resOffer->fetch()) {
+                            $enumId = (int)$row['VALUE_ENUM'];
+                            if ($enumId > 0) {
+                                $enumIdsByProp[$propertyId][$enumId] = true;
+                            }
                         }
                     }
                     continue;
@@ -1088,7 +1288,34 @@ class CatalogService
         }
 
         $priceGroupId = self::catalogPriceGroupId();
-        $priceSql = "
+        $offersIblockId = CatalogSkuService::getOffersIblockId();
+        $linkPropId = CatalogSkuService::getLinkPropertyId();
+        if ($offersIblockId > 0 && $linkPropId > 0) {
+            $priceSql = "
+                SELECT cp.CURRENCY, MIN(cp.PRICE) AS MIN_PRICE, MAX(cp.PRICE) AS MAX_PRICE
+                FROM (
+                    SELECT e.ID AS PRICE_PRODUCT_ID
+                    {$scopeFrom}
+                    WHERE {$scopeWhere}
+                    UNION
+                    SELECT o.ID AS PRICE_PRODUCT_ID
+                    {$scopeFrom}
+                    INNER JOIN b_iblock_element_property lp
+                        ON lp.IBLOCK_PROPERTY_ID = {$linkPropId}
+                       AND lp.VALUE = e.ID
+                    INNER JOIN b_iblock_element o
+                        ON o.ID = lp.IBLOCK_ELEMENT_ID
+                       AND o.IBLOCK_ID = {$offersIblockId}
+                       AND o.ACTIVE = 'Y'
+                    WHERE {$scopeWhere}
+                ) price_products
+                INNER JOIN b_catalog_price cp
+                    ON cp.PRODUCT_ID = price_products.PRICE_PRODUCT_ID
+                   AND cp.CATALOG_GROUP_ID = {$priceGroupId}
+                GROUP BY cp.CURRENCY
+            ";
+        } else {
+            $priceSql = "
             SELECT cp.CURRENCY, MIN(cp.PRICE) AS MIN_PRICE, MAX(cp.PRICE) AS MAX_PRICE
             {$scopeFrom}
             INNER JOIN b_catalog_price cp
@@ -1097,6 +1324,7 @@ class CatalogService
             WHERE {$scopeWhere}
             GROUP BY cp.CURRENCY
         ";
+        }
         $priceRes = self::queryWithPerf($db, $priceSql, $perfForQueries, 'filters_price_minmax');
         $displayCurrency = self::catalogDisplayCurrency();
         $storageCurrency = self::catalogPriceStorageCurrency();
@@ -1186,7 +1414,7 @@ class CatalogService
         $cacheKey = 'section_' . max(0, $sectionId)
             . '_g' . self::catalogPriceGroupId()
             . '_c' . self::catalogDisplayCurrency()
-            . '_' . md5(implode("\n", Assets::filterPropertyCodes()));
+            . '_h' . $configHash;
         $cache = \Bitrix\Main\Data\Cache::createInstance();
         if (!$skipCache && $cache->initCache(Assets::catalogCacheTtl(), $cacheKey, self::CACHE_DIR_FILTERS)) {
             $result = $cache->getVars();
@@ -1848,7 +2076,7 @@ class CatalogService
             return $cache;
         }
 
-        $codes = Assets::filterPropertyCodes();
+        $codes = self::effectiveFilterPropertyCodes();
         if ($codes === []) {
             return $cache = [];
         }
@@ -1882,11 +2110,67 @@ class CatalogService
             ];
         }
 
+        $skuCodeKeys = array_fill_keys(
+            array_map(
+                static fn(string $code): string => strtoupper($code),
+                CatalogSkuService::skuPropertyCodes()
+            ),
+            true
+        );
+
         $ordered = [];
         foreach ($codes as $code) {
             $key = strtoupper($code);
             if (isset($byCode[$key])) {
                 $ordered[] = $byCode[$key];
+            }
+        }
+
+        $offersIblockId = CatalogSkuService::getOffersIblockId();
+        if ($offersIblockId > 0) {
+            $offerLookupCodes = [];
+            foreach ($codes as $code) {
+                $key = strtoupper($code);
+                if (!isset($byCode[$key]) || isset($skuCodeKeys[$key])) {
+                    $offerLookupCodes[] = $code;
+                }
+            }
+            $offerLookupCodes = array_values(array_unique($offerLookupCodes));
+            if ($offerLookupCodes !== []) {
+                $inOffers = implode(',', array_map(
+                    static fn(string $code): string => "'" . $sqlHelper->forSql($code) . "'",
+                    $offerLookupCodes
+                ));
+                $resOffers = $db->query("
+                    SELECT ID, CODE, NAME, PROPERTY_TYPE
+                    FROM b_iblock_property
+                    WHERE IBLOCK_ID = {$offersIblockId}
+                      AND CODE IN ({$inOffers})
+                ");
+                while ($row = $resOffers->fetch()) {
+                    $code = (string)$row['CODE'];
+                    $key = strtoupper($code);
+                    $type = (string)$row['PROPERTY_TYPE'];
+                    $byCode[$key] = [
+                        'ID' => (int)$row['ID'],
+                        'CODE' => $code,
+                        'NAME' => (string)$row['NAME'],
+                        'valueKind' => match ($type) {
+                            'L' => 'enum',
+                            'N' => 'number',
+                            default => 'string',
+                        },
+                        'offersIblock' => true,
+                    ];
+                }
+            }
+
+            $ordered = [];
+            foreach ($codes as $code) {
+                $key = strtoupper($code);
+                if (isset($byCode[$key])) {
+                    $ordered[] = $byCode[$key];
+                }
             }
         }
 
@@ -2344,20 +2628,69 @@ class CatalogService
         }
 
         $pictureMap = self::getFilePaths(array_values($pictureIds));
-        $prices = self::getPrices($itemIds);
-
         foreach ($items as &$item) {
-            $id = (int)$item['ID'];
             $detailPictureId = (int)$item['DETAIL_PICTURE'];
             $item['DETAIL_PICTURE'] = $detailPictureId > 0
                 ? ($pictureMap[$detailPictureId] ?? Assets::NO_PHOTO_IMAGE)
                 : Assets::NO_PHOTO_IMAGE;
-            $item['PRICE'] = $prices[$id] ?? 0.0;
-            $item['CURRENCY'] = self::catalogDisplayCurrency();
         }
         unset($item);
 
+        $prices = self::getPrices($itemIds);
+        self::applySkuPricingToListItems($items, $prices);
+
         return $items;
+    }
+
+    /**
+     * @param list<array<string, mixed>> $items
+     * @param array<int, float> $parentPrices
+     */
+    private static function applySkuPricingToListItems(array &$items, array $parentPrices): void
+    {
+        $itemIds = [];
+        foreach ($items as $item) {
+            $itemIds[] = (int)$item['ID'];
+        }
+        $hasOffersMap = self::resolveHasOffersMap($itemIds);
+
+        foreach ($items as &$item) {
+            $id = (int)$item['ID'];
+            $hasOffers = !empty($hasOffersMap[$id]);
+            $item['hasOffers'] = $hasOffers;
+            if ($hasOffers) {
+                $range = CatalogSkuService::getOfferPriceRange($id);
+                $minPrice = $range !== null ? (float)$range['min'] : 0.0;
+                $maxPrice = $range !== null ? (float)$range['max'] : $minPrice;
+                $item['PRICE_MIN'] = $minPrice;
+                $item['PRICE_MAX'] = $maxPrice;
+                $item['PRICE'] = $minPrice;
+            } else {
+                $item['PRICE'] = $parentPrices[$id] ?? 0.0;
+                $item['PRICE_MIN'] = $item['PRICE'];
+                $item['PRICE_MAX'] = $item['PRICE'];
+            }
+            $item['CURRENCY'] = self::catalogDisplayCurrency();
+        }
+        unset($item);
+    }
+
+    /**
+     * @param list<int> $productIds
+     * @return array<int, bool>
+     */
+    private static function resolveHasOffersMap(array $productIds): array
+    {
+        $map = [];
+        foreach ($productIds as $productId) {
+            $productId = (int)$productId;
+            if ($productId <= 0) {
+                continue;
+            }
+            $map[$productId] = CatalogSkuService::isSkuProduct($productId);
+        }
+
+        return $map;
     }
 
     /**

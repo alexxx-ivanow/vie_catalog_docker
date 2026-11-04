@@ -10,6 +10,7 @@ use Bitrix\Iblock\SectionTable;
 use MyApp\Catalog\Config\Assets;
 use MyApp\Catalog\Service\ProductFilterIndexService;
 use MyApp\Catalog\Service\CatalogService;
+use MyApp\Catalog\Service\CatalogSkuService;
 
 final class CatalogCacheHandler
 {
@@ -164,19 +165,21 @@ final class CatalogCacheHandler
 
     public static function onAfterElementChange(array &$fields): void
     {
-        if (!self::isCatalogElementFields($fields)) {
+        $iblockId = self::resolveIblockIdFromFields($fields);
+        if (!self::isCatalogOrOffersIblock($iblockId)) {
             return;
         }
 
         $elementId = (int)($fields['ID'] ?? 0);
         if ($elementId > 0) {
-            CatalogService::invalidateByElement($elementId, [], true);
+            self::invalidateElementByIblock($elementId, $iblockId);
         }
     }
 
     public static function onAfterElementUpdate(array &$fields): void
     {
-        if (!self::isCatalogElementFields($fields)) {
+        $iblockId = self::resolveIblockIdFromFields($fields);
+        if (!self::isCatalogOrOffersIblock($iblockId)) {
             return;
         }
 
@@ -188,17 +191,31 @@ final class CatalogCacheHandler
         $oldSectionIds = self::$elementSectionsBeforeUpdate[$elementId] ?? [];
         unset(self::$elementSectionsBeforeUpdate[$elementId]);
 
-        CatalogService::invalidateByElement($elementId, $oldSectionIds, true);
+        if (self::isCatalogIblock($iblockId)) {
+            CatalogService::invalidateByElement($elementId, $oldSectionIds, true);
+        } else {
+            self::invalidateElementByIblock($elementId, $iblockId);
+        }
     }
 
     public static function onAfterElementDelete(array &$fields): void
     {
-        if (!self::isCatalogElementFields($fields)) {
+        $iblockId = self::resolveIblockIdFromFields($fields);
+        if (!self::isCatalogOrOffersIblock($iblockId)) {
             return;
         }
 
         $elementId = (int)($fields['ID'] ?? 0);
         if ($elementId <= 0) {
+            return;
+        }
+
+        if (self::isOffersIblock($iblockId)) {
+            $parentId = CatalogSkuService::resolveParentIdFromOffer($elementId);
+            if ($parentId > 0) {
+                CatalogService::invalidateByElement($parentId, [], true);
+            }
+
             return;
         }
 
@@ -223,7 +240,7 @@ final class CatalogCacheHandler
     ): void {
         $elementId = (int)$elementId;
         $iblockId = (int)$iblockId;
-        if ($elementId <= 0 || !self::isCatalogIblock($iblockId)) {
+        if ($elementId <= 0 || !self::isCatalogOrOffersIblock($iblockId)) {
             return;
         }
 
@@ -231,7 +248,7 @@ final class CatalogCacheHandler
             return;
         }
 
-        CatalogService::invalidateByElement($elementId, [], true);
+        self::invalidateElementByIblock($elementId, $iblockId);
     }
 
     public static function onBeforeSectionChange(array &$fields): void
@@ -337,7 +354,17 @@ final class CatalogCacheHandler
             'limit' => 1,
         ])->fetch();
 
-        if (!$row || !self::isCatalogIblock((int)$row['IBLOCK_ID'])) {
+        if (!$row || !self::isCatalogOrOffersIblock((int)$row['IBLOCK_ID'])) {
+            return;
+        }
+
+        $iblockId = (int)$row['IBLOCK_ID'];
+        if (self::isOffersIblock($iblockId)) {
+            $parentId = CatalogSkuService::resolveParentIdFromOffer($productId);
+            if ($parentId > 0) {
+                CatalogService::invalidateByElement($parentId, [], true);
+            }
+
             return;
         }
 
@@ -360,7 +387,7 @@ final class CatalogCacheHandler
                 if (isset($filterIds[(int)$key])) {
                     return true;
                 }
-                if (is_string($key) && in_array($key, Assets::filterPropertyCodes(), true)) {
+                if (is_string($key) && in_array($key, CatalogService::effectiveFilterPropertyCodes(), true)) {
                     return true;
                 }
             }
@@ -368,7 +395,7 @@ final class CatalogCacheHandler
 
         if (is_array($propertyCodes)) {
             foreach ($propertyCodes as $code) {
-                if (in_array((string)$code, Assets::filterPropertyCodes(), true)) {
+                if (in_array((string)$code, CatalogService::effectiveFilterPropertyCodes(), true)) {
                     return true;
                 }
             }
@@ -390,6 +417,38 @@ final class CatalogCacheHandler
     private static function isCatalogIblock(int $iblockId): bool
     {
         return $iblockId > 0 && $iblockId === Assets::catalogIblockId();
+    }
+
+    private static function isOffersIblock(int $iblockId): bool
+    {
+        $offersId = CatalogSkuService::getOffersIblockId();
+
+        return $offersId > 0 && $iblockId === $offersId;
+    }
+
+    private static function isCatalogOrOffersIblock(int $iblockId): bool
+    {
+        return self::isCatalogIblock($iblockId) || self::isOffersIblock($iblockId);
+    }
+
+    private static function invalidateElementByIblock(int $elementId, int $iblockId): void
+    {
+        if ($elementId <= 0) {
+            return;
+        }
+
+        if (self::isCatalogIblock($iblockId)) {
+            CatalogService::invalidateByElement($elementId, [], true);
+
+            return;
+        }
+
+        if (self::isOffersIblock($iblockId)) {
+            $parentId = CatalogSkuService::resolveParentIdFromOffer($elementId);
+            if ($parentId > 0) {
+                CatalogService::invalidateByElement($parentId, [], true);
+            }
+        }
     }
 
     private static function resolveIblockIdFromSectionId(int $sectionId): int

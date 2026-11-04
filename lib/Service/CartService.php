@@ -14,10 +14,32 @@ use Bitrix\Sale\Fuser;
 
 class CartService
 {
-    public static function addProduct(int $productId, int $quantity = 1): array
+    public static function addProduct(int $productId, int $quantity = 1, int $offerId = 0): array
     {
         Loader::includeModule('sale');
         Loader::includeModule('catalog');
+
+        $catalogProductId = $offerId > 0 ? $offerId : $productId;
+        if ($catalogProductId <= 0) {
+            return ['error' => 'Некорректный товар'];
+        }
+
+        if ($offerId <= 0 && $productId > 0 && CatalogSkuService::isSkuProduct($productId)) {
+            return ['error' => 'Выберите вариант товара', 'success' => false];
+        }
+
+        if ($offerId > 0) {
+            $parentFromOffer = CatalogSkuService::resolveParentIdFromOffer($offerId);
+            if ($productId > 0 && $parentFromOffer > 0 && $parentFromOffer !== $productId) {
+                return ['error' => 'Вариант не относится к этому товару', 'success' => false];
+            }
+            if ($parentFromOffer <= 0) {
+                return ['error' => 'Торговое предложение не найдено', 'success' => false];
+            }
+            $productId = $parentFromOffer;
+        } elseif ($productId > 0) {
+            $catalogProductId = $productId;
+        }
 
         $context = Context::getCurrent();
         $siteId  = $context->getSite();
@@ -25,7 +47,7 @@ class CartService
         $fuserId = Fuser::getId();
         $basket  = Basket::loadItemsForFUser($fuserId, $siteId);
 
-        $item = $basket->getExistsItem('catalog', $productId);
+        $item = $basket->getExistsItem('catalog', $catalogProductId);
 
         if ($item) {
             $setResult = $item->setField('QUANTITY', $item->getQuantity() + $quantity);
@@ -35,7 +57,7 @@ class CartService
                 ];
             }
         } else {
-            $item = $basket->createItem('catalog', $productId);
+            $item = $basket->createItem('catalog', $catalogProductId);
             $setResult = $item->setFields([
                 'QUANTITY' => $quantity,
                 'CURRENCY' => CatalogService::catalogDisplayCurrency(),
@@ -49,7 +71,7 @@ class CartService
             }
         }
 
-        self::alignBasketItemWithCatalog($item, CatalogService::getProduct($productId));
+        self::alignBasketItemWithCatalog($item, CatalogService::getProductForCatalogItem($catalogProductId));
 
         $res = $basket->save();
 
@@ -88,7 +110,7 @@ class CartService
 
         $products = [];
         foreach (array_unique($productIds) as $productId) {
-            $product = CatalogService::getProduct($productId);
+            $product = CatalogService::getProductForCatalogItem($productId);
             if ($product) {
                 $products[$productId] = $product;
             }
@@ -102,6 +124,12 @@ class CartService
             $productId = (int)$basketItem->getProductId();
             $product = $products[$productId] ?? null;
             $quantity = (float)$basketItem->getQuantity();
+            $parentId = (int)($product['ID'] ?? $productId);
+            $detailUid = (int)($product['OFFER_ID'] ?? $productId);
+            $url = '/catalog/element/' . $parentId;
+            if ($detailUid > 0 && $detailUid !== $parentId) {
+                $url .= '?uid=' . $detailUid;
+            }
 
             $price = (float)$basketItem->getPrice();
             $basePrice = (float)$basketItem->getBasePrice();
@@ -126,7 +154,7 @@ class CartService
                 'productId' => $productId,
                 'name' => $name,
                 'preview' => $preview,
-                'url' => '/catalog/element/' . $productId,
+                'url' => $url,
                 'article' => $article,
                 'basePrice' => $basePrice,
                 'price' => $price,
@@ -255,7 +283,7 @@ class CartService
 
         $products = [];
         foreach (array_unique($productIds) as $productId) {
-            $product = CatalogService::getProduct($productId);
+            $product = CatalogService::getProductForCatalogItem($productId);
             if ($product) {
                 $products[$productId] = $product;
             }

@@ -24,7 +24,9 @@ final class ProductFilterIndexService
     {
         return md5(
             Assets::catalogIblockId()
+            . '|' . CatalogSkuService::getOffersIblockId()
             . '|' . implode("\n", Assets::filterPropertyCodes())
+            . '|' . implode("\n", CatalogSkuService::skuPropertyCodes())
             . '|' . Assets::catalogArticlePropertyCode()
             . '|' . Assets::catalogPriceTypeCode()
         );
@@ -239,6 +241,7 @@ final class ProductFilterIndexService
         }
 
         self::indexProductPropertyValues($productId);
+        self::indexMergedOfferPropertyValues($productId);
     }
 
     public static function rebuildSection(int $sectionId): int
@@ -322,6 +325,21 @@ final class ProductFilterIndexService
 
         if (!Loader::includeModule('catalog')) {
             return null;
+        }
+
+        if (CatalogSkuService::isSkuProduct($productId)) {
+            $range = CatalogSkuService::getOfferPriceRange($productId);
+            if ($range === null) {
+                return null;
+            }
+            $displayCurrency = CatalogService::catalogDisplayCurrencyPublic();
+            $storageCurrency = CatalogService::catalogPriceStorageCurrencyPublic();
+
+            return CatalogService::convertCatalogPricePublic(
+                (float)$range['min'],
+                $displayCurrency,
+                $storageCurrency
+            );
         }
 
         $groupId = CatalogService::catalogPriceGroupIdPublic();
@@ -658,6 +676,118 @@ final class ProductFilterIndexService
             if ($strVal === '' && $enumVal > 0) {
                 $strVal = (string)$enumVal;
             }
+            if ($strVal === '') {
+                continue;
+            }
+
+            $strStored = mb_substr($strVal, 0, 500);
+            $dedupeKey = 's:' . $propertyId . ':' . $strStored;
+            if (isset($seenValueKeys[$dedupeKey])) {
+                continue;
+            }
+            $seenValueKeys[$dedupeKey] = true;
+            FilterIndexValueTable::add([
+                'PRODUCT_ID' => $productId,
+                'PROPERTY_ID' => $propertyId,
+                'VALUE_ENUM' => null,
+                'VALUE_NUM' => null,
+                'VALUE_STR' => $strStored,
+            ]);
+        }
+    }
+
+    private static function indexMergedOfferPropertyValues(int $productId): void
+    {
+        $offerIds = CatalogSkuService::getOfferIdsForProduct($productId);
+        if ($offerIds === []) {
+            return;
+        }
+
+        $offersIblockId = CatalogSkuService::getOffersIblockId();
+        if ($offersIblockId <= 0) {
+            return;
+        }
+
+        $codes = CatalogService::effectiveFilterPropertyCodes();
+        if ($codes === []) {
+            return;
+        }
+
+        $propertyMap = [];
+        foreach ($codes as $code) {
+            $row = \Bitrix\Iblock\PropertyTable::getList([
+                'select' => ['ID', 'CODE', 'PROPERTY_TYPE'],
+                'filter' => ['=IBLOCK_ID' => $offersIblockId, '=CODE' => $code],
+                'limit' => 1,
+            ])->fetch();
+            if ($row) {
+                $propertyMap[$code] = [
+                    'ID' => (int)$row['ID'],
+                    'TYPE' => (string)$row['PROPERTY_TYPE'],
+                ];
+            }
+        }
+
+        if ($propertyMap === []) {
+            return;
+        }
+
+        $idsSql = implode(',', array_map('intval', $offerIds));
+        $propIdsSql = implode(',', array_map(static fn(array $p): int => (int)$p['ID'], $propertyMap));
+
+        $db = Application::getConnection();
+        $res = $db->query("
+            SELECT IBLOCK_PROPERTY_ID, VALUE, VALUE_ENUM, VALUE_NUM
+            FROM b_iblock_element_property
+            WHERE IBLOCK_ELEMENT_ID IN ({$idsSql})
+              AND IBLOCK_PROPERTY_ID IN ({$propIdsSql})
+        ");
+
+        /** @var array<string, true> $seenValueKeys */
+        $seenValueKeys = [];
+
+        while ($row = $res->fetch()) {
+            $propertyId = (int)$row['IBLOCK_PROPERTY_ID'];
+            $enumVal = (int)$row['VALUE_ENUM'];
+            if ($enumVal <= 0 && is_numeric($row['VALUE'] ?? null)) {
+                $enumVal = (int)$row['VALUE'];
+            }
+            $numVal = $row['VALUE_NUM'];
+            $strVal = trim((string)($row['VALUE'] ?? ''));
+
+            if ($enumVal > 0) {
+                $dedupeKey = 'e:' . $propertyId . ':' . $enumVal;
+                if (isset($seenValueKeys[$dedupeKey])) {
+                    continue;
+                }
+                $seenValueKeys[$dedupeKey] = true;
+                FilterIndexValueTable::add([
+                    'PRODUCT_ID' => $productId,
+                    'PROPERTY_ID' => $propertyId,
+                    'VALUE_ENUM' => $enumVal,
+                    'VALUE_NUM' => null,
+                    'VALUE_STR' => null,
+                ]);
+                continue;
+            }
+
+            if ($numVal !== null && $numVal !== '') {
+                $num = (float)$numVal;
+                $dedupeKey = 'n:' . $propertyId . ':' . $num;
+                if (isset($seenValueKeys[$dedupeKey])) {
+                    continue;
+                }
+                $seenValueKeys[$dedupeKey] = true;
+                FilterIndexValueTable::add([
+                    'PRODUCT_ID' => $productId,
+                    'PROPERTY_ID' => $propertyId,
+                    'VALUE_ENUM' => null,
+                    'VALUE_NUM' => $num,
+                    'VALUE_STR' => null,
+                ]);
+                continue;
+            }
+
             if ($strVal === '') {
                 continue;
             }

@@ -22,7 +22,7 @@
 - **`use_index_option`** — галочка «Использовать индекс для выборки товаров» (`Assets::OPT_USE_PRODUCT_FILTER_INDEX`).
 - **`isIndexReady()`** — option `product_filter_index_ready = Y` **и** `meta.CONFIG_HASH === indexConfigHash()`.
 
-**`indexConfigHash()`** = md5( iblock_id + коды свойств фильтра + код артикула + **код типа цены** ). Смена этих настроек без пересборки → индекс **не готов** (`index_config_stale` в админке).
+**`indexConfigHash()`** = md5( iblock_id + коды свойств фильтра + код артикула + **код типа цены** + **offers iblock id** + **коды SKU-свойств офферов** ). Смена этих настроек без пересборки → индекс **не готов** (`index_config_stale` в админке).
 
 **`shouldUseIndex()`** = option **и** ready. Тогда в [`CatalogService::getGoods()`](../lib/Service/CatalogService.php) (~301) вызывается **`getGoodsViaProductIndex()`** вместо legacy SQL по `b_iblock_element` + `b_iblock_element_property`.
 
@@ -84,7 +84,9 @@ erDiagram
 
 1. `removeProduct` — DELETE строк товара из value, section, product.
 2. Читает элемент из `b_iblock_element`; если нет или `ACTIVE != Y` — **останавливается** (товар исчезает из индекса).
-3. INSERT в `filter_product` (в т.ч. **`PRICE`** через `resolveIndexedPrice`), все `b_iblock_section_element` → `filter_product_section`, свойства → `filter_value`.
+3. INSERT в `filter_product` (в т.ч. **`PRICE`** через `resolveIndexedPrice` — для SKU **MIN** цены активных офферов), все `b_iblock_section_element` → `filter_product_section`, свойства родителя → `filter_value`, затем **`indexMergedOfferPropertyValues`** — значения свойств фильтра/SKU с офферов (по `CML2_LINK`) дописываются в индекс **родителя** с ID свойств офферного инфоблока.
+
+Изменения **оффера** или его цены инвалидируют индекс **родительского** товара ([`CatalogCacheHandler`](../lib/Event/CatalogCacheHandler.php)).
 
 ### 4.2. Job-типы ([`ProductFilterIndexJobService`](../lib/Service/ProductFilterIndexJobService.php))
 
@@ -245,3 +247,16 @@ sequenceDiagram
 - Один SQL: count через window/subquery вместе с list.
 - EXISTS вместо JOIN по свойствам (меньше `DISTINCT`).
 - Индекс `(PROPERTY_ID, VALUE_STR, PRODUCT_ID)` для строковых свойств.
+
+---
+
+## 10. SKU — чеклист QA
+
+После включения торговых предложений (`CatalogSkuService`, опции **offers iblock** / **SKU property codes**):
+
+1. **Карточка:** чипы свойств ТП, цена/артикул/фото активного оффера, `?uid=` в URL, `popstate` сохраняет выбор.
+2. **Список:** `hasOffers` → «от PRICE_MIN», кнопка «Выбрать вариант» вместо прямого добавления.
+3. **Корзина:** `offerId` в API, ссылка на `/catalog/element/{parentId}?uid={offerId}`.
+4. **Фильтр UI:** enum свойств офферов (COLOR/SIZE) и min/max цены с учётом цен ТП; пересборка снапшотов после смены настроек.
+5. **Индекс:** `rebuildProduct` для родителя после изменения оффера/цены оффера; `PRICE` = MIN по офферам.
+6. **Seeder:** `scripts/fill_test_sku_furniture.php` — раздел «Фурнитура», 100 SKU × 1–5 офферов; затем full/section rebuild index + snapshots.

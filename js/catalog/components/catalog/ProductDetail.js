@@ -1,23 +1,55 @@
 import AppPreloader from '../common/AppPreloader.js';
+import SkuSelector from './SkuSelector.js';
 import { catalogApiUrl, getJsonHeaders, getReadHeaders } from '../../api-client.js';
 import { syncCartCountFromResponse } from '../../cart-counter.js';
 import { formatCatalogPrice } from '../../format-catalog-price.js';
+import { readUidFromLocation, syncUidWithActiveOffer, writeUidToLocation } from '../../utils/sku-url.js';
+import { findOfferByProps, propsFromOfferId } from '../../utils/sku-matrix.js';
 
 export default {
     name: 'ProductDetail',
     emits: ['add-to-cart'],
-    components: { AppPreloader },
+    components: { AppPreloader, SkuSelector },
     data() {
+        const pageProduct = window.__PAGE_DATA__?.product?.data || {};
         return {
             product: null,
-            productId: Number(window.__PAGE_DATA__?.product?.data?.ID || 0),
+            productId: Number(pageProduct.ID || 0),
+            initialUid: Number(pageProduct.initialUid || 0) || null,
+            selectedSkuProps: {},
             loading: true,
             loadError: '',
             adding: false,
             added: false,
+            popstateHandler: null,
         };
     },
     computed: {
+        hasOffers() {
+            return Boolean(this.product?.hasOffers && this.product?.sku);
+        },
+        skuOffers() {
+            return Array.isArray(this.product?.sku?.offers) ? this.product.sku.offers : [];
+        },
+        skuTree() {
+            return this.product?.sku?.tree || { props: [] };
+        },
+        activeOffer() {
+            if (!this.hasOffers) {
+                return null;
+            }
+            const dimensions = this.skuTree?.props || [];
+            return findOfferByProps(this.skuOffers, this.selectedSkuProps, dimensions);
+        },
+        canAddToCart() {
+            if (!this.product?.ID) {
+                return false;
+            }
+            if (this.hasOffers) {
+                return Boolean(this.activeOffer?.id);
+            }
+            return true;
+        },
         specProperties() {
             const product = this.product;
             if (!product?.properties?.length) {
@@ -32,7 +64,16 @@ export default {
         },
     },
     mounted() {
-        this.loadProduct();
+        this.popstateHandler = () => {
+            this.loadProduct({ syncUrl: false });
+        };
+        window.addEventListener('popstate', this.popstateHandler);
+        this.loadProduct({ syncUrl: true });
+    },
+    beforeUnmount() {
+        if (this.popstateHandler) {
+            window.removeEventListener('popstate', this.popstateHandler);
+        }
     },
     methods: {
         displayPrice(product) {
@@ -51,7 +92,56 @@ export default {
         isFileProperty(property) {
             return String(property?.type || '').toUpperCase() === 'F';
         },
-        async loadProduct() {
+        selectedPropsFromProduct(product) {
+            if (!product?.hasOffers) {
+                return {};
+            }
+            const offers = product?.sku?.offers || [];
+            const activeId = product?.activeOfferId;
+            if (activeId) {
+                return propsFromOfferId(offers, activeId);
+            }
+
+            return {};
+        },
+        applyOfferToPresentation(offer) {
+            if (!offer || !this.product) {
+                return;
+            }
+            this.product.PRICE = offer.price;
+            if (offer.article !== undefined) {
+                this.product.ARTICLE = offer.article;
+            }
+            if (offer.picture) {
+                this.product.DETAIL_PICTURE = offer.picture;
+            }
+            this.product.activeOfferId = parseInt(offer.id, 10) || 0;
+        },
+        onSelectedSkuPropsUpdate(nextProps) {
+            const resolved = findOfferByProps(
+                this.skuOffers,
+                nextProps,
+                this.skuTree?.props || []
+            );
+            if (resolved) {
+                this.selectedSkuProps = { ...(nextProps || {}) };
+                this.applyOfferToPresentation(resolved);
+                writeUidToLocation(resolved.id, { replace: false });
+                return;
+            }
+            this.selectedSkuProps = { ...(nextProps || {}) };
+        },
+        resolveRequestUid() {
+            const fromUrl = readUidFromLocation();
+            if (fromUrl !== null) {
+                return fromUrl;
+            }
+            if (this.initialUid !== null && this.initialUid > 0) {
+                return this.initialUid;
+            }
+            return null;
+        },
+        async loadProduct({ syncUrl = true } = {}) {
             if (!this.productId) {
                 this.loadError = 'Не удалось определить товар';
                 this.loading = false;
@@ -61,8 +151,14 @@ export default {
             this.loading = true;
             this.loadError = '';
 
+            const requestUid = this.resolveRequestUid();
+            let url = catalogApiUrl('catalog/goods/' + this.productId);
+            if (requestUid !== null) {
+                url += '?uid=' + encodeURIComponent(String(requestUid));
+            }
+
             try {
-                const res = await fetch(catalogApiUrl('catalog/goods/' + this.productId), {
+                const res = await fetch(url, {
                     headers: getReadHeaders(),
                 });
 
@@ -74,6 +170,10 @@ export default {
                 }
 
                 this.product = data;
+                this.selectedSkuProps = this.selectedPropsFromProduct(data);
+                if (syncUrl) {
+                    syncUidWithActiveOffer(requestUid, data.activeOfferId);
+                }
             } catch (error) {
                 this.loadError = 'Ошибка загрузки товара';
                 this.product = null;
@@ -82,18 +182,25 @@ export default {
             }
         },
         async handleAddToCart() {
-            if (!this.product || !this.product.ID) return;
+            if (!this.canAddToCart || !this.product?.ID) {
+                return;
+            }
             this.adding = true;
+
+            const payload = {
+                productId: this.product.ID,
+                quantity: 1,
+                sessid: window.__BX__.sessid,
+            };
+            if (this.hasOffers && this.activeOffer?.id) {
+                payload.offerId = this.activeOffer.id;
+            }
 
             try {
                 const res = await fetch(catalogApiUrl('catalog/cart/add'), {
                     method: 'POST',
                     headers: getJsonHeaders(),
-                    body: JSON.stringify({
-                        productId: this.product.ID,
-                        quantity: 1,
-                        sessid: window.__BX__.sessid,
-                    }),
+                    body: JSON.stringify(payload),
                 });
 
                 const data = await res.json();
@@ -122,7 +229,7 @@ export default {
             <div v-else-if="loadError" class="catalog-empty">{{ loadError }}</div>
             <template v-else>
                 <h1>{{ product.NAME }}</h1>
-                <div class="catalog_item catalog_item--detail">
+                <div class="catalog_item catalog_item--detail" :class="{ 'catalog_item--sku': hasOffers }">
                     <div class="product-detail__hero">
                         <div class="product-detail__media">
                             <p class="img_wrap">
@@ -133,6 +240,13 @@ export default {
                             <p v-if="product.ARTICLE" class="product-detail__article">
                                 Артикул: {{ product.ARTICLE }}
                             </p>
+                            <SkuSelector
+                                v-if="hasOffers"
+                                :tree="skuTree"
+                                :offers="skuOffers"
+                                :selected-props="selectedSkuProps"
+                                @update:selected-props="onSelectedSkuPropsUpdate"
+                            />
                             <div
                                 v-if="product.DETAIL_TEXT"
                                 class="catalog_item__desc product-detail__desc"
@@ -141,10 +255,18 @@ export default {
                             <p class="catalog_item__price product-detail__price">{{ displayPrice(product) }}</p>
                             <button
                                 class="catalog_item__btn product-detail__btn"
-                                :disabled="adding"
+                                :disabled="adding || !canAddToCart"
                                 @click="handleAddToCart"
                             >
-                                {{ added ? '✓ Добавлено' : adding ? 'Добавляем...' : 'В корзину' }}
+                                {{
+                                    hasOffers && !canAddToCart
+                                        ? 'Выберите вариант'
+                                        : added
+                                          ? '✓ Добавлено'
+                                          : adding
+                                            ? 'Добавляем...'
+                                            : 'В корзину'
+                                }}
                             </button>
                         </div>
                     </div>

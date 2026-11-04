@@ -86,7 +86,9 @@ class ApiController
         $this->releaseSessionLock();
 
         try {
-            $product = CatalogService::getProduct($id);
+            $uid = $this->request()->get('uid');
+            $uidInt = $uid !== null && $uid !== '' ? (int)$uid : null;
+            $product = CatalogService::getProduct($id, $uidInt);
             if (!$product) {
                 return $this->jsonResponse(['error' => 'Товар не найден'], 404);
             }
@@ -133,17 +135,18 @@ class ApiController
         }
 
         $productId = (int)($body['productId'] ?? 0);
+        $offerId = (int)($body['offerId'] ?? 0);
         $quantity  = max(1, (int)($body['quantity'] ?: 1));
 
-        if ($productId <= 0) {
+        if ($offerId <= 0 && $productId <= 0) {
             return $this->jsonResponse([
-                'error' => 'Некорректный productId',
+                'error' => 'Некорректный productId или offerId',
                 'data' => $body,
             ], 400);
         }
 
         try {
-            $result = CartService::addProduct($productId, $quantity);
+            $result = CartService::addProduct($productId, $quantity, $offerId);
             $status = !empty($result['error']) ? 400 : 200;
             return $this->jsonResponse($result, $status);
         } catch (\Throwable $e) {

@@ -1,4 +1,4 @@
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import { catalogApiUrl, getJsonHeaders } from '../../api-client.js';
 import { syncCartCountFromResponse } from '../../cart-counter.js';
 import { formatCatalogPrice } from '../../format-catalog-price.js';
@@ -12,10 +12,30 @@ export default {
     emits: ['add-to-cart'],
     setup(props, { emit }) {
         const adding = ref(false);
-        const added  = ref(false);
+        const added = ref(false);
 
+        const hasOffers = computed(() => Boolean(props.product?.hasOffers));
+
+        const detailHref = computed(() => {
+            const id = props.product?.ID;
+            return id ? '/catalog/element/' + id : '#';
+        });
+
+        function displayPrice(product) {
+            if (product?.hasOffers) {
+                const min = product.PRICE_MIN ?? product.PRICE;
+                const formatted = formatCatalogPrice(min, product?.CURRENCY);
+                return 'от ' + formatted;
+            }
+            return formatCatalogPrice(product?.PRICE, product?.CURRENCY);
+        }
 
         async function handleAddToCart() {
+            if (hasOffers.value) {
+                window.location.href = detailHref.value;
+                return;
+            }
+
             adding.value = true;
 
             try {
@@ -24,7 +44,7 @@ export default {
                     headers: getJsonHeaders(),
                     body: JSON.stringify({
                         productId: props.product.ID,
-                        sessid:    window.__BX__.sessid,
+                        sessid: window.__BX__.sessid,
                     }),
                 });
 
@@ -34,7 +54,7 @@ export default {
                     added.value = true;
                     if (data.sessid) window.__BX__.sessid = data.sessid;
                     syncCartCountFromResponse(data);
-                    setTimeout(() => added.value = false, 2000);
+                    setTimeout(() => (added.value = false), 2000);
                 }
 
                 emit('add-to-cart', props.product);
@@ -45,16 +65,19 @@ export default {
             }
         }
 
-        function displayPrice(product) {
-            return formatCatalogPrice(product?.PRICE, product?.CURRENCY);
-        }
-
-        return { adding, added, handleAddToCart, displayPrice };
+        return {
+            adding,
+            added,
+            hasOffers,
+            detailHref,
+            handleAddToCart,
+            displayPrice,
+        };
     },
 
     template: `
-        <div class="catalog_item">
-            <a :href="'/catalog/element/' + product.ID" class="catalog_item__link">
+        <div class="catalog_item" :class="{ 'catalog_item--sku': hasOffers }">
+            <a :href="detailHref" class="catalog_item__link">
                 <p class="img_wrap">
                     <img :src="product.DETAIL_PICTURE" :alt="product.NAME" width="200" height="200"/>
                 </p>
@@ -67,7 +90,15 @@ export default {
                 :disabled="adding"
                 @click="handleAddToCart"
             >
-                {{ added ? '✓ Добавлено' : adding ? 'Добавляем...' : 'В корзину' }}
+                {{
+                    hasOffers
+                        ? 'Выбрать вариант'
+                        : added
+                          ? '✓ Добавлено'
+                          : adding
+                            ? 'Добавляем...'
+                            : 'В корзину'
+                }}
             </button>
         </div>
     `,

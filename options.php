@@ -35,6 +35,8 @@ $optCatalogPriceTypeCode = Assets::OPT_CATALOG_PRICE_TYPE_CODE;
 $optFilterPropertyCodes = Assets::OPT_FILTER_PROPERTY_CODES;
 $optCardPropertyCodes = Assets::OPT_CARD_PROPERTY_CODES;
 $optCatalogArticlePropertyCode = Assets::OPT_CATALOG_ARTICLE_PROPERTY_CODE;
+$optOffersIblockId = Assets::OPT_OFFERS_IBLOCK_ID;
+$optSkuPropertyCodes = Assets::OPT_SKU_PROPERTY_CODES;
 $optUseProductFilterIndex = Assets::OPT_USE_PRODUCT_FILTER_INDEX;
 $optProductFilterIndexAdminStepBatch = Assets::OPT_PRODUCT_FILTER_INDEX_ADMIN_STEP_BATCH;
 $defaultCatalogIblockId = 2;
@@ -79,6 +81,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && check_bitrix_sessid()) {
         $postedArticleCode = Assets::DEFAULT_ARTICLE_PROPERTY_CODE;
     }
     Option::set($moduleId, $optCatalogArticlePropertyCode, $postedArticleCode);
+
+    $postedOffersIblockId = max(0, (int)($_POST[$optOffersIblockId] ?? 0));
+    Option::set($moduleId, $optOffersIblockId, (string)$postedOffersIblockId);
+
+    if (array_key_exists($optSkuPropertyCodes, $_POST)) {
+        $postedSkuCodes = $_POST[$optSkuPropertyCodes] ?? [];
+        $skuPropertyCodes = Assets::normalizePropertyCodes(is_array($postedSkuCodes) ? $postedSkuCodes : []);
+        if ($skuPropertyCodes === []) {
+            $skuPropertyCodes = ['COLOR', 'SIZE'];
+        }
+        Option::set(
+            $moduleId,
+            $optSkuPropertyCodes,
+            (string)json_encode($skuPropertyCodes, JSON_UNESCAPED_UNICODE)
+        );
+    }
 
     $postedIblockId = (int)($_POST[$optCatalogIblockId] ?? 0);
     if ($postedIblockId > 0) {
@@ -128,6 +146,16 @@ $catalogPriceTypeCode = Assets::catalogPriceTypeCode();
 $filterPropertyCodes = Assets::filterPropertyCodes();
 $cardPropertyCodes = Assets::cardPropertyCodes();
 $catalogArticlePropertyCode = Assets::catalogArticlePropertyCode();
+$offersIblockId = (int)Option::get($moduleId, $optOffersIblockId, '0');
+$skuPropertyCodesRaw = Option::get($moduleId, $optSkuPropertyCodes, '');
+$skuPropertyCodes = Assets::normalizePropertyCodes(
+    is_string($skuPropertyCodesRaw) && $skuPropertyCodesRaw !== ''
+        ? (json_decode($skuPropertyCodesRaw, true) ?: ['COLOR', 'SIZE'])
+        : ['COLOR', 'SIZE']
+);
+if ($skuPropertyCodes === []) {
+    $skuPropertyCodes = ['COLOR', 'SIZE'];
+}
 $catalogCacheTtl = Assets::catalogCacheTtl();
 $catalogIblockId = (int)Option::get($moduleId, $optCatalogIblockId, (string)$defaultCatalogIblockId);
 if ($catalogIblockId <= 0) {
@@ -347,6 +375,54 @@ $tabControl->Begin();
             >
         </td>
     </tr>
+    <tr class="heading"><td colspan="2"><?= Loc::getMessage('MYAPP_CATALOG_OPT_SKU_SECTION') ?></td></tr>
+    <tr>
+        <td width="50%" class="adm-detail-content-cell-l">
+            <label for="MYAPP_CATALOG_OFFERS_IBLOCK_ID">
+                <?= Loc::getMessage('MYAPP_CATALOG_OPT_OFFERS_IBLOCK_ID') ?>
+            </label>
+            <br>
+            <small><?= Loc::getMessage('MYAPP_CATALOG_OPT_OFFERS_IBLOCK_ID_HINT') ?></small>
+        </td>
+        <td width="50%" class="adm-detail-content-cell-r">
+            <input
+                type="text"
+                inputmode="numeric"
+                pattern="[0-9]*"
+                id="MYAPP_CATALOG_OFFERS_IBLOCK_ID"
+                name="<?= htmlspecialcharsbx($optOffersIblockId) ?>"
+                value="<?= (int)$offersIblockId ?>"
+                maxlength="10"
+            >
+        </td>
+    </tr>
+    <tr>
+        <td width="50%" class="adm-detail-content-cell-l">
+            <?= Loc::getMessage('MYAPP_CATALOG_OPT_SKU_PROPERTY_CODES') ?>
+            <br>
+            <small><?= Loc::getMessage('MYAPP_CATALOG_OPT_SKU_PROPERTY_CODES_HINT') ?></small>
+        </td>
+        <td width="50%" class="adm-detail-content-cell-r">
+            <div id="myapp-sku-property-codes">
+                <?php foreach ($skuPropertyCodes as $code): ?>
+                    <div class="myapp-catalog-prop-row" style="margin-bottom:8px;">
+                        <input
+                            type="text"
+                            name="<?= htmlspecialcharsbx($optSkuPropertyCodes) ?>[]"
+                            value="<?= htmlspecialcharsbx($code) ?>"
+                            maxlength="50"
+                        >
+                        <button type="button" class="adm-btn myapp-catalog-prop-remove">
+                            <?= Loc::getMessage('MYAPP_CATALOG_OPT_FILTER_PROPS_REMOVE') ?>
+                        </button>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+            <button type="button" class="adm-btn" id="myapp-sku-property-code-add">
+                <?= Loc::getMessage('MYAPP_CATALOG_OPT_FILTER_PROPS_ADD') ?>
+            </button>
+        </td>
+    </tr>
     <tr>
         <td width="50%" class="adm-detail-content-cell-l">
             <label for="MYAPP_CATALOG_CACHE_TTL">
@@ -512,6 +588,11 @@ $tabControl->Begin();
         'myapp-catalog-filter-props',
         'myapp-catalog-filter-prop-add',
         <?= json_encode($optFilterPropertyCodes) ?>
+    );
+    initPropertyCodeList(
+        'myapp-sku-property-codes',
+        'myapp-sku-property-code-add',
+        <?= json_encode($optSkuPropertyCodes) ?>
     );
 })();
 

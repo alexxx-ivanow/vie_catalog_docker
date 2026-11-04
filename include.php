@@ -21,6 +21,7 @@ Loader::registerAutoLoadClasses('myapp.catalog', [
     'MyApp\\Catalog\\Service\\CheckoutUserService' => 'lib/Service/CheckoutUserService.php',
     'MyApp\\Catalog\\Service\\HomeService' => 'lib/Service/HomeService.php',
     'MyApp\\Catalog\\Service\\CatalogService' => 'lib/Service/CatalogService.php',
+    'MyApp\\Catalog\\Service\\CatalogSkuService' => 'lib/Service/CatalogSkuService.php',
     'MyApp\\Catalog\\Service\\CartService' => 'lib/Service/CartService.php',
     'MyApp\\Catalog\\Service\\AccountService' => 'lib/Service/AccountService.php',
     'MyApp\\Catalog\\Service\\PersonalOrderService' => 'lib/Service/PersonalOrderService.php',

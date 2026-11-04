@@ -20,7 +20,10 @@ class ProductController extends BasePageController
 
     public function indexAction(int $id)
     {
-        $product = CatalogService::getProduct($id);
+        $request = Application::getInstance()->getContext()->getRequest();
+        $uidRaw = $request->get('uid');
+        $uid = $uidRaw !== null && $uidRaw !== '' ? (int)$uidRaw : null;
+        $product = CatalogService::getProduct($id, $uid);
         if (!$product) {
             \CHTTP::SetStatus('404 Not Found');
             include Application::getDocumentRoot() . '/404.php';
@@ -36,6 +39,7 @@ class ProductController extends BasePageController
             'data_section'    => [],
             'data_product'    => [
                 'ID' => (int)$product['ID'],
+                'initialUid' => $uid !== null && $uid > 0 ? $uid : null,
             ],
             'jsEntry' => 'app-product.js',
         ];

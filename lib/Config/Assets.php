@@ -36,6 +36,10 @@ final class Assets
 
     public const OPT_PRODUCT_FILTER_INDEX_PARTIAL_SECTION_ID = 'product_filter_index_partial_section_id';
 
+    public const OPT_SKU_PROPERTY_CODES = 'sku_property_codes';
+
+    public const OPT_OFFERS_IBLOCK_ID = 'offers_iblock_id';
+
     public const DEFAULT_PRODUCT_FILTER_INDEX_ADMIN_STEP_BATCH = 30;
 
     public const MAX_PRODUCT_FILTER_INDEX_ADMIN_STEP_BATCH = 120;
