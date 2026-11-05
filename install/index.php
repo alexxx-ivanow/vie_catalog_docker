@@ -116,6 +116,7 @@ class myapp_catalog extends CModule
         if (\Bitrix\Main\Loader::includeModule($this->MODULE_ID)) {
             \MyApp\Catalog\Service\FilterRebuildJobService::ensureAgentRegistered();
             \MyApp\Catalog\Service\ProductFilterIndexJobService::ensureAgentRegistered();
+            \MyApp\Catalog\Service\CatalogSearchIndexJobService::ensureAgentRegistered();
         }
     }
 
@@ -124,6 +125,7 @@ class myapp_catalog extends CModule
         if (\Bitrix\Main\Loader::includeModule($this->MODULE_ID)) {
             \MyApp\Catalog\Service\FilterRebuildJobService::uninstallAgent();
             \MyApp\Catalog\Service\ProductFilterIndexJobService::uninstallAgent();
+            \MyApp\Catalog\Service\CatalogSearchIndexJobService::uninstallAgent();
         }
         if (!\Bitrix\Main\Loader::includeModule($this->MODULE_ID)) {
             \Bitrix\Main\Loader::registerAutoLoadClasses($this->MODULE_ID, [

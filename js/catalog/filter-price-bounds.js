@@ -52,3 +52,25 @@ export function isFullPriceRange(filter, bounds) {
     // Диапазон «по умолчанию» после округления дробного max (например 149999 при max 150000).
     return bounds.max - to <= 1;
 }
+
+/** Число выбранных значений: каждый чекбокс + 1, если задан диапазон цены. */
+export function countActiveCatalogFilters(filter, filterMeta) {
+    if (!filter || filterMeta?.enabled === false) {
+        return 0;
+    }
+
+    let count = 0;
+    const properties = filter.properties || {};
+    Object.values(properties).forEach((values) => {
+        if (Array.isArray(values)) {
+            count += values.length;
+        }
+    });
+
+    const { min: minPrice, max: maxPrice } = normalizePriceBounds(filterMeta);
+    if (Number(filter.price_from) > minPrice || Number(filter.price_to) < maxPrice) {
+        count += 1;
+    }
+
+    return count;
+}

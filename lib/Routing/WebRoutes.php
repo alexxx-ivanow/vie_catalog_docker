@@ -16,6 +16,7 @@ use MyApp\Catalog\Controller\OrderSuccessController;
 use MyApp\Catalog\Controller\OrderPaymentController;
 use MyApp\Catalog\Controller\PersonalController;
 use MyApp\Catalog\Controller\ProductController;
+use MyApp\Catalog\Controller\SearchController;
 
 class WebRoutes
 {
@@ -30,6 +31,7 @@ class WebRoutes
             ->where('id', '[0-9]+');
         $routes->get('/catalog/element/{id}', [ProductController::class, 'index'])
             ->where('id', '[0-9]+');
+        $routes->get('/catalog/search/', [SearchController::class, 'index']);
         $routes->get('/cart/', [CartController::class, 'index']);
         $routes->get('/order/', [OrderController::class, 'index']);
         $routes->get('/order/pay/{id}', [OrderPaymentController::class, 'pay'])
@@ -66,6 +68,10 @@ class WebRoutes
 
         $routes->get($api . '/catalog/goods', static function () {
             return (new ApiController())->goods();
+        });
+
+        $routes->get($api . '/catalog/search', static function () {
+            return (new ApiController())->search();
         });
 
         $routes->get($api . '/catalog/goods/{id}', static function (int $id) {

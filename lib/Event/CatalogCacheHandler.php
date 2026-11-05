@@ -9,6 +9,7 @@ use Bitrix\Iblock\ElementTable;
 use Bitrix\Iblock\SectionTable;
 use MyApp\Catalog\Config\Assets;
 use MyApp\Catalog\Service\ProductFilterIndexService;
+use MyApp\Catalog\Service\CatalogSearchIndexService;
 use MyApp\Catalog\Service\CatalogService;
 use MyApp\Catalog\Service\CatalogSkuService;
 
@@ -224,6 +225,7 @@ final class CatalogCacheHandler
 
         CatalogService::invalidateByElement($elementId, $oldSectionIds, true);
         ProductFilterIndexService::removeProduct($elementId);
+        CatalogSearchIndexService::removeProduct($elementId);
     }
 
     /**

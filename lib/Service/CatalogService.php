@@ -153,7 +153,7 @@ class CatalogService
         $cacheKey = 'product_' . $id
             . '_g' . self::catalogPriceGroupId()
             . '_c' . self::catalogDisplayCurrency()
-            . '_p' . md5(implode(',', Assets::cardPropertyCodes()))
+            . '_p' . md5(implode(',', self::productCardPropertyCodesForFetch()))
             . '_a' . md5(Assets::catalogArticlePropertyCode())
             . $skuSuffix;
         $cache = \Bitrix\Main\Data\Cache::createInstance();
@@ -883,6 +883,7 @@ class CatalogService
         }
 
         ProductFilterIndexQueueService::enqueue($elementId);
+        CatalogSearchIndexQueueService::enqueue($elementId);
     }
 
     public static function invalidateBySection(int $sectionId, bool $includeDescendants = false): void
@@ -1760,6 +1761,31 @@ class CatalogService
     }
 
     /**
+     * Коды свойств для выборки на детальной карточке: настройки «свойства карточки»
+     * плюс код артикула (чтобы ARTICLE заполнялся даже если артикул не в списке характеристик).
+     *
+     * @return list<string>
+     */
+    private static function productCardPropertyCodesForFetch(): array
+    {
+        $codes = Assets::cardPropertyCodes();
+        $articleCode = Assets::catalogArticlePropertyCode();
+        if ($articleCode === '') {
+            return $codes;
+        }
+
+        foreach ($codes as $code) {
+            if (strcasecmp($code, $articleCode) === 0) {
+                return $codes;
+            }
+        }
+
+        $codes[] = $articleCode;
+
+        return $codes;
+    }
+
+    /**
      * @return list<array{ID: int, CODE: string, NAME: string, type: string, multiple: bool}>
      */
     private static function productCardPropertyDefinitions(): array
@@ -1769,7 +1795,7 @@ class CatalogService
             return $cache;
         }
 
-        $codes = Assets::cardPropertyCodes();
+        $codes = self::productCardPropertyCodesForFetch();
         if ($codes === []) {
             return $cache = [];
         }
@@ -2586,6 +2612,18 @@ class CatalogService
             . 'ix' . ProductFilterIndexService::getIndexVersion() . '|'
             . ProductFilterIndexService::indexConfigHash()
         );
+    }
+
+    /**
+     * @param list<int> $productIds
+     * @return list<array<string, mixed>>
+     */
+    public static function loadGoodsDetailsByIdsForSearch(array $productIds): array
+    {
+        Loader::includeModule('iblock');
+        Loader::includeModule('catalog');
+
+        return self::loadGoodsDetailsByIds($productIds);
     }
 
     /**

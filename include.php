@@ -7,6 +7,7 @@ Loader::registerAutoLoadClasses('myapp.catalog', [
     'MyApp\\Catalog\\Controller\\HomeController' => 'lib/Controller/HomeController.php',
     'MyApp\\Catalog\\Controller\\CatalogController' => 'lib/Controller/CatalogController.php',
     'MyApp\\Catalog\\Controller\\ProductController' => 'lib/Controller/ProductController.php',
+    'MyApp\\Catalog\\Controller\\SearchController' => 'lib/Controller/SearchController.php',
     'MyApp\\Catalog\\Controller\\CartController' => 'lib/Controller/CartController.php',
     'MyApp\\Catalog\\Controller\\ApiController' => 'lib/Controller/ApiController.php',
     'MyApp\\Catalog\\Controller\\CheckoutApiController' => 'lib/Controller/CheckoutApiController.php',
@@ -47,10 +48,25 @@ Loader::registerAutoLoadClasses('myapp.catalog', [
     'MyApp\\Catalog\\Service\\ProductFilterIndexService' => 'lib/Service/ProductFilterIndexService.php',
     'MyApp\\Catalog\\Service\\ProductFilterIndexJobService' => 'lib/Service/ProductFilterIndexJobService.php',
     'MyApp\\Catalog\\Service\\ProductFilterQueryService' => 'lib/Service/ProductFilterQueryService.php',
+    'MyApp\\Catalog\\Install\\CatalogSearchIndexSchema' => 'lib/Install/CatalogSearchIndexSchema.php',
+    'MyApp\\Catalog\\Model\\SearchIndexMetaTable' => 'lib/Model/SearchIndexMetaTable.php',
+    'MyApp\\Catalog\\Model\\SearchIndexDocumentTable' => 'lib/Model/SearchIndexDocumentTable.php',
+    'MyApp\\Catalog\\Model\\SearchIndexTokenTable' => 'lib/Model/SearchIndexTokenTable.php',
+    'MyApp\\Catalog\\Model\\SearchIndexQueueTable' => 'lib/Model/SearchIndexQueueTable.php',
+    'MyApp\\Catalog\\Model\\SearchIndexJobTable' => 'lib/Model/SearchIndexJobTable.php',
+    'MyApp\\Catalog\\Service\\CatalogSearchTextNormalizer' => 'lib/Service/CatalogSearchTextNormalizer.php',
+    'MyApp\\Catalog\\Service\\CatalogSearchIndexQueueService' => 'lib/Service/CatalogSearchIndexQueueService.php',
+    'MyApp\\Catalog\\Service\\CatalogSearchIndexService' => 'lib/Service/CatalogSearchIndexService.php',
+    'MyApp\\Catalog\\Service\\CatalogSearchIndexJobService' => 'lib/Service/CatalogSearchIndexJobService.php',
+    'MyApp\\Catalog\\Service\\CatalogSearchQueryService' => 'lib/Service/CatalogSearchQueryService.php',
+    'MyApp\\Catalog\\Service\\CatalogSearchSuggestService' => 'lib/Service/CatalogSearchSuggestService.php',
+    'MyApp\\Catalog\\Service\\CatalogSearchService' => 'lib/Service/CatalogSearchService.php',
 ]);
 
 \MyApp\Catalog\Event\CatalogCacheHandler::ensurePersistentHandlers();
 \MyApp\Catalog\Install\FilterAggregateSchema::ensureRebuildInfrastructure();
 \MyApp\Catalog\Install\ProductFilterIndexSchema::ensureInfrastructure();
+\MyApp\Catalog\Install\CatalogSearchIndexSchema::ensureInfrastructure();
 \MyApp\Catalog\Service\FilterRebuildJobService::ensureAgentRegistered();
 \MyApp\Catalog\Service\ProductFilterIndexJobService::ensureAgentRegistered();
+\MyApp\Catalog\Service\CatalogSearchIndexJobService::ensureAgentRegistered();

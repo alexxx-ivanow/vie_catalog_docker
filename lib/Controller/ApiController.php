@@ -7,6 +7,7 @@ use Bitrix\Main\Engine\Response\Json;
 use MyApp\Catalog\Config\Assets;
 use MyApp\Catalog\Service\CartService;
 use MyApp\Catalog\Service\CatalogService;
+use MyApp\Catalog\Service\CatalogSearchService;
 
 class ApiController
 {
@@ -76,6 +77,22 @@ class ApiController
 
         try {
             return new Json(CatalogService::getGoods($filter, $page, $limit, $sectionId));
+        } catch (\Throwable $e) {
+            return $this->errorResponse($e);
+        }
+    }
+
+    public function search(): Json
+    {
+        $this->releaseSessionLock();
+        $request = $this->request();
+        $query = trim((string)$request->get('q'));
+        $page = max(1, (int)$request->get('page') ?: 1);
+        $limit = CatalogService::normalizeGoodsLimit($request->get('limit'));
+        $sort = $request->get('sort');
+
+        try {
+            return new Json(CatalogSearchService::search($query, $page, $limit, is_string($sort) ? $sort : null));
         } catch (\Throwable $e) {
             return $this->errorResponse($e);
         }

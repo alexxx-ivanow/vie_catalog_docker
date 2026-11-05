@@ -117,10 +117,10 @@
             var processed = progress.processed || 0;
             var total = progress.total || 0;
             var type = progress.type || '';
-            var currentId = domain === 'index'
+            var currentId = domain === 'index' || domain === 'search'
                 ? (progress.current_product_id || 0)
                 : (progress.current_section_id || 0);
-            var currentLabel = domain === 'index'
+            var currentLabel = domain === 'index' || domain === 'search'
                 ? (labels.currentProduct || 'товар')
                 : (labels.currentSection || 'раздел');
 
@@ -184,7 +184,7 @@
             var active = !!progress.active;
             setProgressVisible(active || (!progress.finished && percent > 0 && percent < 100));
             setCancelButtonsState(active);
-            if (domain === 'index' && active) {
+            if (domain === 'index' || domain === 'search') {
                 updateIndexConfigStaleBanner(null, progress);
             }
         }
@@ -223,13 +223,13 @@
                 }
                 cell.textContent = formatStatValue(key, stats);
             });
-            if (domain === 'index') {
+            if (domain === 'index' || domain === 'search') {
                 updateIndexConfigStaleBanner(stats, null);
             }
         }
 
         function updateIndexConfigStaleBanner(stats, progress) {
-            if (domain !== 'index') {
+            if (domain !== 'index' && domain !== 'search') {
                 return;
             }
             var wrap = tab.querySelector('[data-myapp-index-config-stale-wrap]');
@@ -255,7 +255,7 @@
             if (data.stats) {
                 updateStats(data.stats);
             }
-            if (domain === 'index' && data.stats) {
+            if ((domain === 'index' || domain === 'search') && data.stats) {
                 updateIndexConfigStaleBanner(data.stats, data.progress || null);
             }
             return data;

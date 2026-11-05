@@ -2,7 +2,7 @@ import ProductCard from './ProductCard.js';
 import CatalogPagination from './CatalogPagination.js';
 import CatalogFilter from '../filter/CatalogFilter.js';
 import { catalogApiUrl, getReadHeaders } from '../../api-client.js';
-import { clampFilterPrices, normalizePriceBounds } from '../../filter-price-bounds.js';
+import { clampFilterPrices, countActiveCatalogFilters, normalizePriceBounds } from '../../filter-price-bounds.js';
 import { appendCatalogQuery, readPropertiesFromSearch, readSortFromSearch } from '../../filter-query.js';
 import CatalogSortSelect from './CatalogSortSelect.js';
 import { smoothScrollToElement } from '../../scroll-with-sticky-header.js';
@@ -111,6 +111,15 @@ export default {
             isInitialLoad: !initial,
             hydratedFromPage: Boolean(initial),
         };
+    },
+    computed: {
+        activeFilterCount() {
+            if (!this.store.filterEnabled) {
+                return 0;
+            }
+
+            return countActiveCatalogFilters(this.store.filter, this.store.filterMeta);
+        },
     },
     async mounted() {
         if (!this.store.filterEnabled) {
@@ -365,7 +374,14 @@ export default {
                             v-if="store.filterEnabled"
                             for="catalog-filter-drawer"
                             class="catalog-filter-drawer__open"
-                        >Фильтр</label>
+                        >
+                            <span class="catalog-filter-drawer__open-text">Фильтр</span>
+                            <span
+                                v-if="activeFilterCount > 0"
+                                class="catalog-filter-drawer__open-count"
+                                :aria-label="'Выбрано фильтров: ' + activeFilterCount"
+                            >{{ activeFilterCount }}</span>
+                        </label>
                         <span v-if="store.loading" class="catalog-skeleton-line catalog-skeleton-line--toolbar" aria-hidden="true"></span>
                         <span v-else class="catalog-page__toolbar-count">Найдено: {{ store.total }}</span>
                         <CatalogSortSelect

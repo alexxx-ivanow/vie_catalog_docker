@@ -40,6 +40,22 @@ final class Assets
 
     public const OPT_OFFERS_IBLOCK_ID = 'offers_iblock_id';
 
+    public const OPT_SEARCH_PRODUCT_PROPERTY_CODES = 'catalog_search_product_property_codes';
+
+    public const OPT_SEARCH_OFFER_PROPERTY_CODES = 'catalog_search_offer_property_codes';
+
+    public const OPT_INDEX_PRODUCT_PREVIEW_TEXT = 'index_product_preview_text';
+
+    public const OPT_INDEX_PRODUCT_DETAIL_TEXT = 'index_product_detail_text';
+
+    public const OPT_CATALOG_SEARCH_INDEX_ADMIN_STEP_BATCH = 'search_index_admin_step_batch';
+
+    public const OPT_CATALOG_SEARCH_INDEX_BATCH_SIZE = 'catalog_search_index_batch_size';
+
+    public const DEFAULT_CATALOG_SEARCH_INDEX_ADMIN_STEP_BATCH = 30;
+
+    public const MAX_CATALOG_SEARCH_INDEX_ADMIN_STEP_BATCH = 120;
+
     public const DEFAULT_PRODUCT_FILTER_INDEX_ADMIN_STEP_BATCH = 30;
 
     public const MAX_PRODUCT_FILTER_INDEX_ADMIN_STEP_BATCH = 120;
@@ -117,6 +133,74 @@ final class Assets
         }
 
         return min(self::MAX_PRODUCT_FILTER_INDEX_ADMIN_STEP_BATCH, max(1, $size));
+    }
+
+    public static function searchIndexAdminStepBatch(): int
+    {
+        $size = (int)Option::get(
+            self::MODULE_ID,
+            self::OPT_CATALOG_SEARCH_INDEX_ADMIN_STEP_BATCH,
+            (string)self::DEFAULT_CATALOG_SEARCH_INDEX_ADMIN_STEP_BATCH
+        );
+        if ($size <= 0) {
+            $size = self::DEFAULT_CATALOG_SEARCH_INDEX_ADMIN_STEP_BATCH;
+        }
+
+        return min(self::MAX_CATALOG_SEARCH_INDEX_ADMIN_STEP_BATCH, max(1, $size));
+    }
+
+    /**
+     * @return list<string>
+     */
+    public static function searchProductPropertyCodes(): array
+    {
+        $raw = (string)Option::get(self::MODULE_ID, self::OPT_SEARCH_PRODUCT_PROPERTY_CODES, '');
+        if ($raw === '') {
+            return [];
+        }
+        $decoded = json_decode($raw, true);
+
+        return self::normalizePropertyCodes(is_array($decoded) ? $decoded : []);
+    }
+
+    /**
+     * @return list<string>
+     */
+    public static function searchOfferPropertyCodes(): array
+    {
+        $raw = (string)Option::get(self::MODULE_ID, self::OPT_SEARCH_OFFER_PROPERTY_CODES, '');
+        if ($raw === '') {
+            return self::skuPropertyCodesFromOption();
+        }
+        $decoded = json_decode($raw, true);
+        $codes = self::normalizePropertyCodes(is_array($decoded) ? $decoded : []);
+
+        return $codes !== [] ? $codes : self::skuPropertyCodesFromOption();
+    }
+
+    public static function indexProductPreviewText(): bool
+    {
+        return Option::get(self::MODULE_ID, self::OPT_INDEX_PRODUCT_PREVIEW_TEXT, 'Y') === 'Y';
+    }
+
+    public static function indexProductDetailText(): bool
+    {
+        return Option::get(self::MODULE_ID, self::OPT_INDEX_PRODUCT_DETAIL_TEXT, 'N') === 'Y';
+    }
+
+    /**
+     * @return list<string>
+     */
+    private static function skuPropertyCodesFromOption(): array
+    {
+        $raw = (string)Option::get(self::MODULE_ID, self::OPT_SKU_PROPERTY_CODES, '');
+        if ($raw === '') {
+            return ['COLOR', 'SIZE'];
+        }
+        $decoded = json_decode($raw, true);
+        $codes = self::normalizePropertyCodes(is_array($decoded) ? $decoded : []);
+
+        return $codes !== [] ? $codes : ['COLOR', 'SIZE'];
     }
 
     public static function catalogIblockId(): int

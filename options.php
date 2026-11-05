@@ -8,6 +8,8 @@ use MyApp\Catalog\Service\CatalogService;
 use MyApp\Catalog\Service\FilterRebuildJobService;
 use MyApp\Catalog\Service\ProductFilterIndexService;
 use MyApp\Catalog\Service\ProductFilterIndexJobService;
+use MyApp\Catalog\Service\CatalogSearchIndexService;
+use MyApp\Catalog\Service\CatalogSearchIndexJobService;
 
 /**
  * @global CUser $USER
@@ -39,12 +41,19 @@ $optOffersIblockId = Assets::OPT_OFFERS_IBLOCK_ID;
 $optSkuPropertyCodes = Assets::OPT_SKU_PROPERTY_CODES;
 $optUseProductFilterIndex = Assets::OPT_USE_PRODUCT_FILTER_INDEX;
 $optProductFilterIndexAdminStepBatch = Assets::OPT_PRODUCT_FILTER_INDEX_ADMIN_STEP_BATCH;
+$optSearchProductPropertyCodes = Assets::OPT_SEARCH_PRODUCT_PROPERTY_CODES;
+$optSearchOfferPropertyCodes = Assets::OPT_SEARCH_OFFER_PROPERTY_CODES;
+$optIndexProductPreviewText = Assets::OPT_INDEX_PRODUCT_PREVIEW_TEXT;
+$optIndexProductDetailText = Assets::OPT_INDEX_PRODUCT_DETAIL_TEXT;
+$optSearchIndexAdminStepBatch = Assets::OPT_CATALOG_SEARCH_INDEX_ADMIN_STEP_BATCH;
 $defaultCatalogIblockId = 2;
 $filterIndexConfigChangedOnSave = false;
+$searchIndexConfigChangedOnSave = false;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && check_bitrix_sessid()) {
     $filtersConfigHashBefore = CatalogService::filtersConfigHash();
     $indexConfigHashBefore = ProductFilterIndexService::indexConfigHash();
+    $searchConfigHashBefore = CatalogSearchIndexService::searchConfigHash();
 
     Option::set($moduleId, $optUseBitrixVue, isset($_POST[$optUseBitrixVue]) ? 'Y' : 'N');
     Option::set(
@@ -126,11 +135,55 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && check_bitrix_sessid()) {
         Option::set($moduleId, $optProductFilterIndexAdminStepBatch, (string)$postedStepBatch);
     }
 
+    if (array_key_exists($optSearchProductPropertyCodes, $_POST)) {
+        $postedSearchProductCodes = $_POST[$optSearchProductPropertyCodes] ?? [];
+        $searchProductCodes = Assets::normalizePropertyCodes(is_array($postedSearchProductCodes) ? $postedSearchProductCodes : []);
+        Option::set(
+            $moduleId,
+            $optSearchProductPropertyCodes,
+            (string)json_encode($searchProductCodes, JSON_UNESCAPED_UNICODE)
+        );
+    }
+
+    if (array_key_exists($optSearchOfferPropertyCodes, $_POST)) {
+        $postedSearchOfferCodes = $_POST[$optSearchOfferPropertyCodes] ?? [];
+        $searchOfferCodes = Assets::normalizePropertyCodes(is_array($postedSearchOfferCodes) ? $postedSearchOfferCodes : []);
+        Option::set(
+            $moduleId,
+            $optSearchOfferPropertyCodes,
+            (string)json_encode($searchOfferCodes, JSON_UNESCAPED_UNICODE)
+        );
+    }
+
+    Option::set(
+        $moduleId,
+        $optIndexProductPreviewText,
+        isset($_POST[$optIndexProductPreviewText]) ? 'Y' : 'N'
+    );
+    Option::set(
+        $moduleId,
+        $optIndexProductDetailText,
+        isset($_POST[$optIndexProductDetailText]) ? 'Y' : 'N'
+    );
+
+    if (array_key_exists($optSearchIndexAdminStepBatch, $_POST)) {
+        $postedSearchStepBatch = (int)($_POST[$optSearchIndexAdminStepBatch] ?? 0);
+        if ($postedSearchStepBatch <= 0) {
+            $postedSearchStepBatch = Assets::DEFAULT_CATALOG_SEARCH_INDEX_ADMIN_STEP_BATCH;
+        }
+        $postedSearchStepBatch = min(Assets::MAX_CATALOG_SEARCH_INDEX_ADMIN_STEP_BATCH, max(1, $postedSearchStepBatch));
+        Option::set($moduleId, $optSearchIndexAdminStepBatch, (string)$postedSearchStepBatch);
+    }
+
     CatalogService::clearCatalogDataCache();
     if (CatalogService::filtersConfigHash() !== $filtersConfigHashBefore) {
         CatalogService::markFilterSnapshotsForRebuild();
     }
     $filterIndexConfigChangedOnSave = $indexConfigHashBefore !== ProductFilterIndexService::indexConfigHash();
+    $searchIndexConfigChangedOnSave = $searchConfigHashBefore !== CatalogSearchIndexService::searchConfigHash();
+    if ($searchIndexConfigChangedOnSave) {
+        CatalogSearchIndexService::onSearchConfigChanged();
+    }
 }
 
 $filterSnapshotStats = FilterRebuildJobService::getStatistics();
@@ -138,6 +191,14 @@ $filterSnapshotErrors = FilterRebuildJobService::getRecentErrors(15);
 $filterIndexStatus = ProductFilterIndexService::getIndexStatus();
 $filterIndexErrors = ProductFilterIndexService::getRecentProductErrors(15);
 $filterIndexInitialProgress = ProductFilterIndexJobService::getProgressPayload();
+$searchIndexStatus = CatalogSearchIndexService::getIndexStatus();
+$searchIndexErrors = CatalogSearchIndexService::getRecentProductErrors(15);
+$searchIndexInitialProgress = CatalogSearchIndexJobService::getProgressPayload();
+$searchProductPropertyCodes = Assets::searchProductPropertyCodes();
+$searchOfferPropertyCodes = Assets::searchOfferPropertyCodes();
+$indexProductPreviewText = Assets::indexProductPreviewText();
+$indexProductDetailText = Assets::indexProductDetailText();
+$searchIndexAdminStepBatch = Assets::searchIndexAdminStepBatch();
 
 $useBitrixVue = Option::get($moduleId, $optUseBitrixVue, 'N') === 'Y';
 $autoLoginAfterGuestOrder = Option::get($moduleId, $optAutoLoginAfterGuestOrder, 'N') === 'Y';
@@ -168,6 +229,10 @@ $filterJobsAjaxUrl = '/bitrix/admin/myapp_catalog_filter_jobs_ajax.php';
 if (!is_file($_SERVER['DOCUMENT_ROOT'] . $filterJobsAjaxUrl)) {
     $filterJobsAjaxUrl = '/local/modules/myapp.catalog/admin/myapp_catalog_filter_jobs_ajax.php';
 }
+$searchJobsAjaxUrl = '/bitrix/admin/myapp_catalog_search_jobs_ajax.php';
+if (!is_file($_SERVER['DOCUMENT_ROOT'] . $searchJobsAjaxUrl)) {
+    $searchJobsAjaxUrl = '/local/modules/myapp.catalog/admin/myapp_catalog_search_jobs_ajax.php';
+}
 
 $aTabs = [
     [
@@ -185,11 +250,18 @@ $aTabs = [
         'TAB' => Loc::getMessage('MYAPP_CATALOG_OPT_TAB_INDEX'),
         'TITLE' => Loc::getMessage('MYAPP_CATALOG_OPT_TAB_INDEX_TITLE'),
     ],
+    [
+        'DIV' => 'edit4',
+        'TAB' => Loc::getMessage('MYAPP_CATALOG_OPT_TAB_SEARCH'),
+        'TITLE' => Loc::getMessage('MYAPP_CATALOG_OPT_TAB_SEARCH_TITLE'),
+    ],
 ];
 
 $tabControl = new CAdminTabControl('tabControl', $aTabs);
 if ((string)($_REQUEST['tabControl_active_tab'] ?? '') === 'edit3') {
     $tabControl->selectedTab = 'edit3';
+} elseif ((string)($_REQUEST['tabControl_active_tab'] ?? '') === 'edit4') {
+    $tabControl->selectedTab = 'edit4';
 } elseif (
     !empty($_POST['myapp_filter_snapshot_action'])
     || (string)($_REQUEST['tabControl_active_tab'] ?? '') === 'edit2'
@@ -448,6 +520,8 @@ $tabControl->Begin();
     include __DIR__ . '/options/filter_snapshots_tab.php';
     $tabControl->BeginNextTab();
     include __DIR__ . '/options/filter_index_tab.php';
+    $tabControl->BeginNextTab();
+    include __DIR__ . '/options/search_index_tab.php';
     $tabControl->Buttons();
     ?>
     <input type="submit" class="adm-btn-save" name="save" value="<?= Loc::getMessage('MAIN_SAVE') ?>">
@@ -594,6 +668,16 @@ $tabControl->Begin();
         'myapp-sku-property-code-add',
         <?= json_encode($optSkuPropertyCodes) ?>
     );
+    initPropertyCodeList(
+        'myapp-search-product-props',
+        'myapp-search-product-prop-add',
+        <?= json_encode($optSearchProductPropertyCodes) ?>
+    );
+    initPropertyCodeList(
+        'myapp-search-offer-props',
+        'myapp-search-offer-prop-add',
+        <?= json_encode($optSearchOfferPropertyCodes) ?>
+    );
 })();
 
 <?php
@@ -631,6 +715,18 @@ MyappCatalogFilterJobs.init([
         stepBatchInputSelector: '[data-myapp-index-step-batch]',
         stepBatchMax: <?= (int)Assets::MAX_PRODUCT_FILTER_INDEX_ADMIN_STEP_BATCH ?>,
         initialProgress: <?= json_encode($filterIndexInitialProgress, JSON_UNESCAPED_UNICODE) ?>,
+        labels: <?= json_encode($filterJobsLabels, JSON_UNESCAPED_UNICODE) ?>
+    },
+    {
+        domain: 'search',
+        tabId: 'edit4',
+        ajaxUrl: <?= json_encode($searchJobsAjaxUrl) ?>,
+        sessid: <?= json_encode(bitrix_sessid()) ?>,
+        batchSize: <?= (int)$searchIndexAdminStepBatch ?>,
+        cancelAlwaysVisible: true,
+        stepBatchInputSelector: '[data-myapp-search-step-batch]',
+        stepBatchMax: <?= (int)Assets::MAX_CATALOG_SEARCH_INDEX_ADMIN_STEP_BATCH ?>,
+        initialProgress: <?= json_encode($searchIndexInitialProgress, JSON_UNESCAPED_UNICODE) ?>,
         labels: <?= json_encode($filterJobsLabels, JSON_UNESCAPED_UNICODE) ?>
     }
 ]);

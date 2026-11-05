@@ -10,6 +10,7 @@ $data_product = is_array($data_product ?? null) ? $data_product : [];
 $data_order = is_array($data_order ?? null) ? $data_order : [];
 $data_auth_confirm = is_array($data_auth_confirm ?? null) ? $data_auth_confirm : [];
 $data_auth_change_password = is_array($data_auth_change_password ?? null) ? $data_auth_change_password : [];
+$data_search = is_array($data_search ?? null) ? $data_search : [];
 $sectionPagination = is_array($sectionPagination ?? null) ? $sectionPagination : [];
 $sectionFilter = is_array($sectionFilter ?? null) ? $sectionFilter : [];
 $apiBase = (string)($apiBase ?? '/vue_catalog/api/v1/');
@@ -50,6 +51,7 @@ $showBreadcrumbs = ($showBreadcrumbs ?? true) !== false;
             <img src="/local/templates/assets/img/svg/logo.svg" alt="<?= htmlspecialcharsbx($pageTitle) ?>" width="180" height="48">
         </a>
         <nav class="site-nav" aria-label="Основное меню">
+            <div id="app-site-search"></div>
             <a href="/" class="site-nav__link">Главная</a>
             <a href="/catalog/" class="site-nav__link">Каталог</a>
             <div id="app-site-header"></div>
@@ -127,6 +129,7 @@ $showBreadcrumbs = ($showBreadcrumbs ?? true) !== false;
         },
         authConfirm: <?= json_encode($data_auth_confirm, JSON_UNESCAPED_UNICODE) ?>,
         authChangePassword: <?= json_encode($data_auth_change_password, JSON_UNESCAPED_UNICODE) ?>,
+        search: <?= json_encode($data_search, JSON_UNESCAPED_UNICODE) ?>,
     };
 </script>
 
