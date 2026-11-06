@@ -4,6 +4,11 @@ require __DIR__ . '/cron_agent.php';
 
 $MESS['MYAPP_CATALOG_SEARCH_INDEX_STATS_HEADING'] = 'Статистика поискового индекса';
 $MESS['MYAPP_CATALOG_SEARCH_INDEX_ACTIONS_HEADING'] = 'Действия';
+$MESS['MYAPP_CATALOG_SEARCH_BACKEND'] = 'Движок поиска';
+$MESS['MYAPP_CATALOG_SEARCH_BACKEND_HINT'] = 'mysql_lexeme_trigram — словарь лексем и триграммы (подстрока в слове). legacy_token — старый индекс по целым токенам. После смены — полное переиндексирование.';
+$MESS['MYAPP_CATALOG_SEARCH_BACKEND_MYSQL_TRIGRAM'] = 'MySQL: лексемы + триграммы';
+$MESS['MYAPP_CATALOG_SEARCH_BACKEND_LEGACY'] = 'Legacy: токены по товару';
+$MESS['MYAPP_CATALOG_SEARCH_BACKEND_STAT'] = 'Движок (активный)';
 $MESS['MYAPP_CATALOG_SEARCH_INDEX_PRODUCT_PROPS'] = 'Свойства товара для индекса';
 $MESS['MYAPP_CATALOG_SEARCH_INDEX_PRODUCT_PROPS_HINT'] = 'Коды свойств родительского товара (строка, число, список). NAME всегда индексируется.';
 $MESS['MYAPP_CATALOG_SEARCH_INDEX_OFFER_PROPS'] = 'Свойства ТП для индекса';
@@ -15,7 +20,9 @@ $MESS['MYAPP_CATALOG_SEARCH_INDEX_CONFIG_HASH'] = 'Хеш конфигураци
 $MESS['MYAPP_CATALOG_SEARCH_INDEX_CONFIG_EXPECTED'] = 'Ожидаемый хеш конфигурации';
 $MESS['MYAPP_CATALOG_SEARCH_INDEX_READY'] = 'Поиск включён';
 $MESS['MYAPP_CATALOG_SEARCH_INDEX_DOCUMENTS'] = 'Документов в индексе';
-$MESS['MYAPP_CATALOG_SEARCH_INDEX_TOKENS'] = 'Токенов в индексе';
+$MESS['MYAPP_CATALOG_SEARCH_INDEX_TOKENS'] = 'Записей индекса (товар–лексема / токен)';
+$MESS['MYAPP_CATALOG_SEARCH_BACKEND_LABEL_MYSQL'] = 'MySQL: лексемы + триграммы';
+$MESS['MYAPP_CATALOG_SEARCH_BACKEND_LABEL_LEGACY'] = 'Legacy: токены по товару';
 $MESS['MYAPP_CATALOG_SEARCH_INDEX_QUEUE'] = 'В очереди';
 $MESS['MYAPP_CATALOG_SEARCH_INDEX_LAST_SYNC'] = 'Последняя полная синхронизация';
 $MESS['MYAPP_CATALOG_SEARCH_INDEX_BTN_FULL'] = 'Полное переиндексирование';

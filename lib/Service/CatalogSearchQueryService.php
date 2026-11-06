@@ -9,10 +9,6 @@ use MyApp\Catalog\Model\SearchIndexTokenTable;
 
 final class CatalogSearchQueryService
 {
-    private const MIN_SCORE_ONE_TOKEN = 5;
-
-    private const MIN_SCORE_MULTI = 10;
-
     private const NAME_PREFIX_BONUS = 5;
 
     /**
@@ -99,7 +95,7 @@ final class CatalogSearchQueryService
         }
 
         $scores = self::scoreProducts($intersection, $tokens, $normQuery);
-        $minScore = count($tokens) === 1 ? self::MIN_SCORE_ONE_TOKEN : self::MIN_SCORE_MULTI;
+        $minScore = self::minimumStrictScoreThreshold($tokens);
         $filtered = [];
         foreach ($intersection as $productId) {
             $score = (int)($scores[$productId] ?? 0);
@@ -124,6 +120,16 @@ final class CatalogSearchQueryService
             'scores' => $scores,
             'product_ids' => $filtered,
         ];
+    }
+
+    /**
+     * Как в лексемном бэкенде: порог = WEIGHT_DETAIL × число токенов (минимальный реалистичный вклад по полям).
+     *
+     * @param list<string> $tokens
+     */
+    private static function minimumStrictScoreThreshold(array $tokens): int
+    {
+        return CatalogSearchIndexService::WEIGHT_DETAIL * count($tokens);
     }
 
     /**
@@ -173,7 +179,7 @@ final class CatalogSearchQueryService
         }
 
         $scores = self::scoreProducts($intersection, $tokens, $normQuery);
-        $minScore = self::MIN_SCORE_ONE_TOKEN;
+        $minScore = self::minimumStrictScoreThreshold($tokens);
         $filtered = [];
         foreach ($intersection as $productId) {
             $score = (int)($scores[$productId] ?? 0);

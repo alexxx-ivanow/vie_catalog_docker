@@ -2,6 +2,8 @@
 
 namespace MyApp\Catalog\Service;
 
+use MyApp\Catalog\Search\CatalogSearchBackendFactory;
+
 final class CatalogSearchService
 {
     /**
@@ -43,7 +45,7 @@ final class CatalogSearchService
             ];
         }
 
-        $result = CatalogSearchQueryService::searchProductIds($query, $page, $limit);
+        $result = CatalogSearchBackendFactory::create()->searchProductIds($query, $page, $limit);
         $total = (int)$result['total'];
         $pages = $limit > 0 ? (int)ceil($total / $limit) : 0;
         $productIds = $result['product_ids'];

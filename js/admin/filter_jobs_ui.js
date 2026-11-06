@@ -196,6 +196,10 @@
             if (key === 'index_ready') {
                 return stats.index_ready ? (labels.yes || 'Да') : (labels.no || 'Нет');
             }
+            if (key === 'search_backend' && labels.searchBackend && stats.search_backend) {
+                var sb = String(stats.search_backend);
+                return labels.searchBackend[sb] !== undefined ? labels.searchBackend[sb] : sb;
+            }
             if (key === 'partial_section_id') {
                 var sectionId = parseInt(stats.partial_section_id, 10) || 0;
                 if (sectionId <= 0) {

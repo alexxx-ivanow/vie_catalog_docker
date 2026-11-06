@@ -46,6 +46,7 @@ $optSearchOfferPropertyCodes = Assets::OPT_SEARCH_OFFER_PROPERTY_CODES;
 $optIndexProductPreviewText = Assets::OPT_INDEX_PRODUCT_PREVIEW_TEXT;
 $optIndexProductDetailText = Assets::OPT_INDEX_PRODUCT_DETAIL_TEXT;
 $optSearchIndexAdminStepBatch = Assets::OPT_CATALOG_SEARCH_INDEX_ADMIN_STEP_BATCH;
+$optCatalogSearchBackend = Assets::OPT_CATALOG_SEARCH_BACKEND;
 $defaultCatalogIblockId = 2;
 $filterIndexConfigChangedOnSave = false;
 $searchIndexConfigChangedOnSave = false;
@@ -175,6 +176,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && check_bitrix_sessid()) {
         Option::set($moduleId, $optSearchIndexAdminStepBatch, (string)$postedSearchStepBatch);
     }
 
+    if (array_key_exists($optCatalogSearchBackend, $_POST)) {
+        $postedBackend = trim((string)($_POST[$optCatalogSearchBackend] ?? ''));
+        $allowed = [
+            \MyApp\Catalog\Search\CatalogSearchBackendFactory::BACKEND_MYSQL_LEXEME_TRIGRAM,
+            \MyApp\Catalog\Search\CatalogSearchBackendFactory::BACKEND_LEGACY_TOKEN,
+        ];
+        if (!in_array($postedBackend, $allowed, true)) {
+            $postedBackend = \MyApp\Catalog\Search\CatalogSearchBackendFactory::BACKEND_MYSQL_LEXEME_TRIGRAM;
+        }
+        Option::set($moduleId, $optCatalogSearchBackend, $postedBackend);
+    }
+
     CatalogService::clearCatalogDataCache();
     if (CatalogService::filtersConfigHash() !== $filtersConfigHashBefore) {
         CatalogService::markFilterSnapshotsForRebuild();
@@ -199,6 +212,10 @@ $searchOfferPropertyCodes = Assets::searchOfferPropertyCodes();
 $indexProductPreviewText = Assets::indexProductPreviewText();
 $indexProductDetailText = Assets::indexProductDetailText();
 $searchIndexAdminStepBatch = Assets::searchIndexAdminStepBatch();
+$catalogSearchBackend = trim((string)Option::get($moduleId, $optCatalogSearchBackend, ''));
+if ($catalogSearchBackend === '') {
+    $catalogSearchBackend = \MyApp\Catalog\Search\CatalogSearchBackendFactory::BACKEND_MYSQL_LEXEME_TRIGRAM;
+}
 
 $useBitrixVue = Option::get($moduleId, $optUseBitrixVue, 'N') === 'Y';
 $autoLoginAfterGuestOrder = Option::get($moduleId, $optAutoLoginAfterGuestOrder, 'N') === 'Y';
@@ -727,7 +744,12 @@ MyappCatalogFilterJobs.init([
         stepBatchInputSelector: '[data-myapp-search-step-batch]',
         stepBatchMax: <?= (int)Assets::MAX_CATALOG_SEARCH_INDEX_ADMIN_STEP_BATCH ?>,
         initialProgress: <?= json_encode($searchIndexInitialProgress, JSON_UNESCAPED_UNICODE) ?>,
-        labels: <?= json_encode($filterJobsLabels, JSON_UNESCAPED_UNICODE) ?>
+        labels: <?= json_encode(array_merge($filterJobsLabels, [
+            'searchBackend' => [
+                'mysql_lexeme_trigram' => Loc::getMessage('MYAPP_CATALOG_SEARCH_BACKEND_LABEL_MYSQL'),
+                'legacy_token' => Loc::getMessage('MYAPP_CATALOG_SEARCH_BACKEND_LABEL_LEGACY'),
+            ],
+        ]), JSON_UNESCAPED_UNICODE) ?>
     }
 ]);
 </script>

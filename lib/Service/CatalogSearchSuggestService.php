@@ -2,9 +2,8 @@
 
 namespace MyApp\Catalog\Service;
 
-use Bitrix\Main\Application;
 use MyApp\Catalog\Install\CatalogSearchIndexSchema;
-use MyApp\Catalog\Model\SearchIndexTokenTable;
+use MyApp\Catalog\Search\CatalogSearchBackendFactory;
 
 final class CatalogSearchSuggestService
 {
@@ -20,7 +19,7 @@ final class CatalogSearchSuggestService
         }
 
         $limit = max(1, min(5, $limit));
-        $candidates = self::loadCandidateTokens($queryTokens);
+        $candidates = self::loadCandidateLexemesForBackend($queryTokens, 400);
         if ($candidates === []) {
             return [];
         }
@@ -88,45 +87,9 @@ final class CatalogSearchSuggestService
      * @param list<string> $queryTokens
      * @return list<string>
      */
-    private static function loadCandidateTokens(array $queryTokens): array
+    public static function loadCandidateLexemesForBackend(array $queryTokens, int $limit = 400): array
     {
-        $connection = Application::getConnection();
-        $helper = $connection->getSqlHelper();
-        $table = SearchIndexTokenTable::getTableName();
-        $prefixes = [];
-        foreach ($queryTokens as $token) {
-            $prefix = mb_substr($token, 0, 2, 'UTF-8');
-            if ($prefix !== '') {
-                $prefixes[$prefix] = true;
-            }
-        }
-        if ($prefixes === []) {
-            return [];
-        }
-
-        $conditions = [];
-        foreach (array_keys($prefixes) as $prefix) {
-            $conditions[] = "TOKEN LIKE '" . $helper->forSql($prefix) . "%'";
-        }
-
-        $res = $connection->query("
-            SELECT TOKEN, COUNT(*) AS CNT
-            FROM {$table}
-            WHERE " . implode(' OR ', $conditions) . "
-            GROUP BY TOKEN
-            ORDER BY CNT DESC
-            LIMIT 400
-        ");
-
-        $tokens = [];
-        while ($row = $res->fetch()) {
-            $token = (string)$row['TOKEN'];
-            if (CatalogSearchTextNormalizer::isValidTokenForSql($token)) {
-                $tokens[] = $token;
-            }
-        }
-
-        return $tokens;
+        return CatalogSearchBackendFactory::create()->suggestCandidateLexemes($queryTokens, $limit);
     }
 
     /**

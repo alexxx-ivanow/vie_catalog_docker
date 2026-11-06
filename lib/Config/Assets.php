@@ -52,6 +52,9 @@ final class Assets
 
     public const OPT_CATALOG_SEARCH_INDEX_BATCH_SIZE = 'catalog_search_index_batch_size';
 
+    /** mysql_lexeme_trigram | legacy_token */
+    public const OPT_CATALOG_SEARCH_BACKEND = 'catalog_search_backend';
+
     public const DEFAULT_CATALOG_SEARCH_INDEX_ADMIN_STEP_BATCH = 30;
 
     public const MAX_CATALOG_SEARCH_INDEX_ADMIN_STEP_BATCH = 120;

@@ -20,6 +20,66 @@ final class CatalogSearchIndexSchema
             self::createTables();
             Option::set(self::MODULE_ID, self::OPT_SCHEMA_READY, 'Y');
         }
+        self::ensureLexemeTrigramTables();
+    }
+
+    private static function ensureLexemeTrigramTables(): void
+    {
+        $connection = Application::getConnection();
+        if (!$connection->isTableExists('myapp_catalog_search_lexeme')) {
+            $connection->queryExecute("
+                CREATE TABLE myapp_catalog_search_lexeme (
+                    ID INT NOT NULL AUTO_INCREMENT,
+                    LEXEME_TEXT VARCHAR(64) NOT NULL,
+                    PRIMARY KEY (ID),
+                    UNIQUE KEY ux_myapp_csl_text (LEXEME_TEXT)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            ");
+        }
+
+        if (!$connection->isTableExists('myapp_catalog_search_lexeme_trigram')) {
+            $connection->queryExecute("
+                CREATE TABLE myapp_catalog_search_lexeme_trigram (
+                    LEXEME_ID INT NOT NULL,
+                    TRIGRAM CHAR(3) NOT NULL,
+                    PRIMARY KEY (LEXEME_ID, TRIGRAM),
+                    INDEX ix_myapp_cslt_trigram_lexeme (TRIGRAM, LEXEME_ID)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            ");
+        }
+
+        if (!$connection->isTableExists('myapp_catalog_search_product_lexeme')) {
+            $connection->queryExecute("
+                CREATE TABLE myapp_catalog_search_product_lexeme (
+                    PRODUCT_ID INT NOT NULL,
+                    LEXEME_ID INT NOT NULL,
+                    WEIGHT INT NOT NULL DEFAULT 1,
+                    PRIMARY KEY (PRODUCT_ID, LEXEME_ID),
+                    INDEX ix_myapp_cspl_lexeme_product (LEXEME_ID, PRODUCT_ID)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            ");
+        }
+
+        // Миграция: у старых инсталляций не было лексемных таблиц — флаг вынесен отдельно.
+        $flag = 'catalog_search_lexeme_schema_v1';
+        if (Option::get(self::MODULE_ID, $flag, 'N') === 'Y') {
+            return;
+        }
+
+        // Добавляем опционально FULLTEXT на документе для коротких запросов (админка может отключить).
+        $ft = $connection->query("SHOW INDEX FROM myapp_catalog_search_document WHERE Key_name = 'ft_myapp_csd_body'")->fetch();
+        if ($ft === false) {
+            try {
+                $connection->queryExecute("
+                    ALTER TABLE myapp_catalog_search_document
+                    ADD FULLTEXT INDEX ft_myapp_csd_body (NAME_NORM, BODY_NORM)
+                ");
+            } catch (\Throwable $e) {
+                // Нет InnoDB FULLTEXT или версия MySQL — короткие запросы без FULLTEXT недоступны
+            }
+        }
+
+        Option::set(self::MODULE_ID, $flag, 'Y');
     }
 
     private static function createTables(): void
@@ -119,6 +179,9 @@ final class CatalogSearchIndexSchema
         self::ensureInfrastructure();
         $connection = Application::getConnection();
         foreach ([
+            'myapp_catalog_search_product_lexeme',
+            'myapp_catalog_search_lexeme_trigram',
+            'myapp_catalog_search_lexeme',
             'myapp_catalog_search_token',
             'myapp_catalog_search_document',
         ] as $table) {

@@ -1,5 +1,6 @@
 import { catalogApiUrl, getReadHeaders } from '../../api-client.js';
 import { appendCatalogQuery } from '../../filter-query.js';
+import { buildPaginationPageList } from '../../pagination-pages.js';
 
 export default {
     name: 'CatalogPagination',
@@ -13,6 +14,11 @@ export default {
     },
 
     emits: ['page-data'],
+    computed: {
+        paginationItems() {
+            return buildPaginationPageList(this.currentPage, this.totalPages);
+        },
+    },
     data() {
         return {
             loading: false,
@@ -65,28 +71,18 @@ export default {
                     @click="go(currentPage - 1)"
                 >←</button>
 
-                <template v-for="page in totalPages" :key="page">
-                    <template v-if="
-                        page === 1 ||
-                        page === totalPages ||
-                        Math.abs(page - currentPage) <= 1
-                    ">
-                        <button
-                            class="catalog-pagination__btn"
-                            :class="{ 'catalog-pagination__btn--active': page === currentPage }"
-                            @click="go(page)"
-                        >{{ page }}</button>
-                    </template>
-
+                <template v-for="item in paginationItems" :key="item.type === 'page' ? 'p-' + item.page : item.key">
                     <span
-                        v-else-if="page === currentPage - 2"
+                        v-if="item.type === 'ellipsis'"
                         class="catalog-pagination__dots"
+                        aria-hidden="true"
                     >...</span>
-
-                    <span
-                        v-else-if="page === currentPage + 2"
-                        class="catalog-pagination__dots"
-                    >...</span>
+                    <button
+                        v-else
+                        class="catalog-pagination__btn"
+                        :class="{ 'catalog-pagination__btn--active': item.page === currentPage }"
+                        @click="go(item.page)"
+                    >{{ item.page }}</button>
                 </template>
 
                 <button

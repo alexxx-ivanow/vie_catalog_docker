@@ -14,6 +14,8 @@
  * @var bool $indexProductDetailText
  * @var int $searchIndexAdminStepBatch
  * @var bool $searchIndexConfigChangedOnSave
+ * @var string $optCatalogSearchBackend
+ * @var string $catalogSearchBackend
  */
 
 use Bitrix\Main\Localization\Loc;
@@ -26,6 +28,10 @@ if (is_file($searchLang)) {
 }
 
 if (!isset($searchIndexStatus, $searchIndexErrors, $searchProductPropertyCodes, $searchOfferPropertyCodes)) {
+    return;
+}
+
+if (!isset($optCatalogSearchBackend, $catalogSearchBackend)) {
     return;
 }
 
@@ -138,6 +144,25 @@ $cronWorker = str_replace('#MODULE_ROOT#', $moduleRoot, Loc::getMessage('MYAPP_C
 </tr>
 <tr>
     <td width="50%" class="adm-detail-content-cell-l">
+        <?= Loc::getMessage('MYAPP_CATALOG_SEARCH_BACKEND') ?>
+        <br>
+        <small><?= Loc::getMessage('MYAPP_CATALOG_SEARCH_BACKEND_HINT') ?></small>
+    </td>
+    <td width="50%" class="adm-detail-content-cell-r">
+        <select name="<?= htmlspecialcharsbx($optCatalogSearchBackend) ?>" id="MYAPP_CATALOG_SEARCH_BACKEND">
+            <option
+                value="mysql_lexeme_trigram"
+                <?= $catalogSearchBackend === 'mysql_lexeme_trigram' ? 'selected' : '' ?>
+            ><?= Loc::getMessage('MYAPP_CATALOG_SEARCH_BACKEND_MYSQL_TRIGRAM') ?></option>
+            <option
+                value="legacy_token"
+                <?= $catalogSearchBackend === 'legacy_token' ? 'selected' : '' ?>
+            ><?= Loc::getMessage('MYAPP_CATALOG_SEARCH_BACKEND_LEGACY') ?></option>
+        </select>
+    </td>
+</tr>
+<tr>
+    <td width="50%" class="adm-detail-content-cell-l">
         <?= Loc::getMessage('MYAPP_CATALOG_SEARCH_INDEX_PREVIEW') ?>
     </td>
     <td width="50%" class="adm-detail-content-cell-r">
@@ -190,6 +215,7 @@ $cronWorker = str_replace('#MODULE_ROOT#', $moduleRoot, Loc::getMessage('MYAPP_C
 <?php
 $statKeys = [
     'index_ready' => 'MYAPP_CATALOG_SEARCH_INDEX_READY',
+    'search_backend' => 'MYAPP_CATALOG_SEARCH_BACKEND_STAT',
     'index_version' => 'MYAPP_CATALOG_SEARCH_INDEX_VERSION',
     'config_hash' => 'MYAPP_CATALOG_SEARCH_INDEX_CONFIG_HASH',
     'expected_config_hash' => 'MYAPP_CATALOG_SEARCH_INDEX_CONFIG_EXPECTED',
@@ -200,6 +226,7 @@ $statKeys = [
 ];
 $initialStatValues = [
     'index_ready' => $readyLabel,
+    'search_backend' => (string)($stats['search_backend'] ?? ''),
     'index_version' => (string)(int)($stats['index_version'] ?? 0),
     'config_hash' => (string)($stats['config_hash'] ?? ''),
     'expected_config_hash' => (string)($stats['expected_config_hash'] ?? ''),

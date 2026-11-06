@@ -2,6 +2,7 @@ import ProductCard from './ProductCard.js';
 import CatalogSortSelect from './CatalogSortSelect.js';
 import { catalogApiUrl, getReadHeaders } from '../../api-client.js';
 import { smoothScrollToElement } from '../../scroll-with-sticky-header.js';
+import { buildPaginationPageList } from '../../pagination-pages.js';
 
 const DEFAULT_LIMIT = 12;
 
@@ -46,6 +47,11 @@ function readInitialFromPage(urlState) {
 export default {
     name: 'SearchResultsPage',
     components: { ProductCard, CatalogSortSelect },
+    computed: {
+        paginationItems() {
+            return buildPaginationPageList(this.page, this.pages);
+        },
+    },
     data() {
         const urlState = readUrlState();
         const initial = readInitialFromPage(urlState);
@@ -236,14 +242,20 @@ export default {
                         :disabled="page === 1 || paginationLoading"
                         @click="goToPage(page - 1)"
                     >←</button>
-                    <button
-                        v-for="p in pages"
-                        :key="p"
-                        class="catalog-pagination__btn"
-                        :class="{ 'catalog-pagination__btn--active': p === page }"
-                        :disabled="paginationLoading"
-                        @click="goToPage(p)"
-                    >{{ p }}</button>
+                    <template v-for="item in paginationItems" :key="item.type === 'page' ? 'p-' + item.page : item.key">
+                        <span
+                            v-if="item.type === 'ellipsis'"
+                            class="catalog-pagination__dots"
+                            aria-hidden="true"
+                        >...</span>
+                        <button
+                            v-else
+                            class="catalog-pagination__btn"
+                            :class="{ 'catalog-pagination__btn--active': item.page === page }"
+                            :disabled="paginationLoading"
+                            @click="goToPage(item.page)"
+                        >{{ item.page }}</button>
+                    </template>
                     <button
                         class="catalog-pagination__btn"
                         :disabled="page === pages || paginationLoading"

@@ -10,7 +10,8 @@ use MyApp\Catalog\Config\Assets;
 use MyApp\Catalog\Install\CatalogSearchIndexSchema;
 use MyApp\Catalog\Model\SearchIndexDocumentTable;
 use MyApp\Catalog\Model\SearchIndexMetaTable;
-use MyApp\Catalog\Model\SearchIndexTokenTable;
+use MyApp\Catalog\Search\CatalogSearchBackendFactory;
+use MyApp\Catalog\Search\CatalogSearchBackendInterface;
 
 final class CatalogSearchIndexService
 {
@@ -39,7 +40,14 @@ final class CatalogSearchIndexService
             . '|' . implode("\n", Assets::searchOfferPropertyCodes())
             . '|' . (Assets::indexProductPreviewText() ? '1' : '0')
             . '|' . (Assets::indexProductDetailText() ? '1' : '0')
+            . '|' . CatalogSearchBackendFactory::getBackendId()
+            . '|v3_lexeme_trigram'
         );
+    }
+
+    private static function searchBackend(): CatalogSearchBackendInterface
+    {
+        return CatalogSearchBackendFactory::create();
     }
 
     public static function isIndexReady(): bool
@@ -116,13 +124,7 @@ final class CatalogSearchIndexService
 
         CatalogSearchIndexSchema::ensureInfrastructure();
 
-        $connection = Application::getConnection();
-        $tokenTable = SearchIndexTokenTable::getTableName();
-        $connection->queryExecute("DELETE FROM {$tokenTable} WHERE PRODUCT_ID = {$productId}");
-
-        if (SearchIndexDocumentTable::getByPrimary($productId)->fetch()) {
-            SearchIndexDocumentTable::delete($productId);
-        }
+        self::searchBackend()->removeProductIndex($productId);
     }
 
     public static function rebuildProduct(int $productId): void
@@ -170,36 +172,33 @@ final class CatalogSearchIndexService
         $bodyParts = array_values(array_filter($bodyParts, static fn(string $p): bool => $p !== ''));
         $bodyNorm = implode(' ', $bodyParts);
 
-        /** @var array<string, int> $tokenWeights token => max weight */
-        $tokenWeights = [];
+        /** @var array<string, int> $lexemeWeights lexeme => max weight */
+        $lexemeWeights = [];
 
-        self::addTokensFromText($tokenWeights, $nameNorm, self::WEIGHT_NAME, 'name', true);
+        self::addLexemesFromText($lexemeWeights, $nameNorm, self::WEIGHT_NAME, true);
         if (Assets::indexProductPreviewText()) {
-            self::addTokensFromText(
-                $tokenWeights,
+            self::addLexemesFromText(
+                $lexemeWeights,
                 CatalogSearchTextNormalizer::normalizeText((string)($row['PREVIEW_TEXT'] ?? '')),
                 self::WEIGHT_PREVIEW,
-                'preview',
                 false
             );
         }
         if (Assets::indexProductDetailText()) {
-            self::addTokensFromText(
-                $tokenWeights,
+            self::addLexemesFromText(
+                $lexemeWeights,
                 CatalogSearchTextNormalizer::normalizeText((string)($row['DETAIL_TEXT'] ?? '')),
                 self::WEIGHT_DETAIL,
-                'detail',
                 false
             );
         }
 
         foreach (self::collectPropertyTexts($productId, $iblockId, $productPropCodes) as $text) {
-            self::addTokensFromText($tokenWeights, $text, self::WEIGHT_PARENT_PROP, 'prop', false);
+            self::addLexemesFromText($lexemeWeights, $text, self::WEIGHT_PARENT_PROP, false);
         }
 
         foreach ($offerTexts as $chunk) {
-            $weight = ($chunk['source'] ?? '') === 'offer_name' ? self::WEIGHT_OFFER : self::WEIGHT_OFFER;
-            self::addTokensFromText($tokenWeights, $chunk['text'], $weight, (string)$chunk['source'], false);
+            self::addLexemesFromText($lexemeWeights, $chunk['text'], self::WEIGHT_OFFER, false);
         }
 
         SearchIndexDocumentTable::add([
@@ -213,38 +212,29 @@ final class CatalogSearchIndexService
             'LAST_ERROR' => null,
         ]);
 
-        foreach ($tokenWeights as $token => $weight) {
-            if (!CatalogSearchTextNormalizer::isValidTokenForSql($token)) {
-                continue;
-            }
-            SearchIndexTokenTable::add([
-                'PRODUCT_ID' => $productId,
-                'TOKEN' => $token,
-                'WEIGHT' => min(255, max(1, (int)$weight)),
-                'SOURCE' => 'mixed',
-            ]);
-        }
+        self::searchBackend()->indexProductLexemes($productId, $lexemeWeights);
     }
 
     /**
-     * @param array<string, int> $tokenWeights
+     * @param array<string, int> $lexemeWeights
      */
-    private static function addTokensFromText(
-        array &$tokenWeights,
+    private static function addLexemesFromText(
+        array &$lexemeWeights,
         string $text,
         int $weight,
-        string $source,
         bool $withStem
     ): void {
-        unset($source);
         $norm = CatalogSearchTextNormalizer::normalizeText($text);
         if ($norm === '') {
             return;
         }
 
-        $tokens = CatalogSearchTextNormalizer::extractTokens($norm, true);
+        $tokens = CatalogSearchTextNormalizer::extractTokens($norm, true, $withStem);
         foreach ($tokens as $token) {
-            $tokenWeights[$token] = max($tokenWeights[$token] ?? 0, $weight);
+            if (!CatalogSearchTextNormalizer::isValidTokenForSql($token)) {
+                continue;
+            }
+            $lexemeWeights[$token] = max($lexemeWeights[$token] ?? 0, $weight);
         }
 
         if (!$withStem) {
@@ -260,8 +250,8 @@ final class CatalogSearchIndexService
             $stem = CatalogSearchTextNormalizer::clipToken(
                 mb_substr((string)$piece, 0, $len - 2, 'UTF-8')
             );
-            if (mb_strlen($stem, 'UTF-8') >= 3) {
-                $tokenWeights[$stem] = max($tokenWeights[$stem] ?? 0, self::WEIGHT_STEM);
+            if (mb_strlen($stem, 'UTF-8') >= 3 && CatalogSearchTextNormalizer::isValidTokenForSql($stem)) {
+                $lexemeWeights[$stem] = max($lexemeWeights[$stem] ?? 0, self::WEIGHT_STEM);
             }
         }
     }
@@ -470,9 +460,7 @@ final class CatalogSearchIndexService
         $documents = (int)$connection->queryScalar(
             'SELECT COUNT(*) FROM ' . SearchIndexDocumentTable::getTableName()
         );
-        $tokens = (int)$connection->queryScalar(
-            'SELECT COUNT(*) FROM ' . SearchIndexTokenTable::getTableName()
-        );
+        $tokens = self::searchBackend()->getIndexedLinksCount();
         self::updateMeta([
             'DOCUMENTS_COUNT' => $documents,
             'TOKENS_COUNT' => $tokens,
@@ -506,6 +494,7 @@ final class CatalogSearchIndexService
             'index_version' => (int)($meta['INDEX_VERSION'] ?? 0),
             'config_hash' => (string)($meta['CONFIG_HASH'] ?? ''),
             'expected_config_hash' => self::searchConfigHash(),
+            'search_backend' => CatalogSearchBackendFactory::getBackendId(),
             'documents_count' => (int)($meta['DOCUMENTS_COUNT'] ?? 0),
             'tokens_count' => (int)($meta['TOKENS_COUNT'] ?? 0),
             'last_full_sync_at' => $meta['LAST_FULL_SYNC_AT'] ?? null,
