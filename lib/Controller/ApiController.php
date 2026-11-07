@@ -122,9 +122,10 @@ class ApiController
         $pageType = (string)($request->get('pageType') ?? 'catalog');
         $sectionId = max(0, (int)$request->get('section'));
         $productId = max(0, (int)$request->get('product'));
+        $contentPageTitle = trim((string)($request->get('contentPageTitle') ?? ''));
 
         try {
-            $items = CatalogService::getBreadcrumbs($pageType, $sectionId, $productId);
+            $items = CatalogService::getBreadcrumbs($pageType, $sectionId, $productId, $contentPageTitle);
             return $this->jsonResponse(['items' => $items]);
         } catch (\Throwable $e) {
             return $this->errorResponse($e);

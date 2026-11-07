@@ -1489,7 +1489,12 @@ class CatalogService
         return $result;
     }
 
-    public static function getBreadcrumbs(string $pageType, int $sectionId = 0, int $productId = 0): array
+    public static function getBreadcrumbs(
+        string $pageType,
+        int $sectionId = 0,
+        int $productId = 0,
+        string $contentPageTitle = ''
+    ): array
     {
         if ($pageType === 'cart') {
             return [
@@ -1548,6 +1553,15 @@ class CatalogService
 
         if ($pageType === 'catalog') {
             $breadcrumbs[1]['url'] = null;
+        }
+
+        if ($pageType === 'content_page') {
+            $title = $contentPageTitle !== '' ? $contentPageTitle : 'Страница';
+
+            return [
+                ['title' => 'Главная', 'url' => '/'],
+                ['title' => $title, 'url' => null],
+            ];
         }
 
         return $breadcrumbs;

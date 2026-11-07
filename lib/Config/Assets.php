@@ -55,6 +55,42 @@ final class Assets
     /** mysql_lexeme_trigram | legacy_token */
     public const OPT_CATALOG_SEARCH_BACKEND = 'catalog_search_backend';
 
+    public const OPT_PAGES_IBLOCK_ID = 'pages_iblock_id';
+
+    public const OPT_PAGES_VIEW_FIELD_MAP = 'pages_view_field_map';
+
+    public const OPT_MAIN_IBLOCK_SLIDER_ID = 'main_iblock_slider_id';
+
+    public const OPT_MAIN_IBLOCK_ADVANTAGES_ID = 'main_iblock_advantages_id';
+
+    public const OPT_MAIN_IBLOCK_ABOUT_ID = 'main_iblock_about_id';
+
+    public const OPT_MAIN_IBLOCK_SEO_ID = 'main_iblock_seo_id';
+
+    public const OPT_HOME_VIEW_FIELD_MAP = 'home_view_field_map';
+
+    public const OPT_HOME_SECTIONS_UF_SHOW = 'home_sections_uf_show_code';
+
+    public const OPT_HOME_SECTIONS_UF_SORT = 'home_sections_uf_sort_code';
+
+    public const OPT_HOME_SECTIONS_LIMIT = 'home_sections_limit';
+
+    public const OPT_HOME_SHOW_SLIDER = 'home_show_slider';
+
+    public const OPT_HOME_SHOW_ADVANTAGES = 'home_show_advantages';
+
+    public const OPT_HOME_SHOW_ABOUT = 'home_show_about';
+
+    public const OPT_HOME_SHOW_SEO = 'home_show_seo';
+
+    public const OPT_HOME_SHOW_CATALOG = 'home_show_catalog';
+
+    public const DEFAULT_HOME_SECTIONS_LIMIT = 4;
+
+    public const DEFAULT_HOME_SECTIONS_UF_SHOW = 'UF_SHOW_ON_MAIN';
+
+    public const DEFAULT_HOME_SECTIONS_UF_SORT = 'UF_MAIN_SORT';
+
     public const DEFAULT_CATALOG_SEARCH_INDEX_ADMIN_STEP_BATCH = 30;
 
     public const MAX_CATALOG_SEARCH_INDEX_ADMIN_STEP_BATCH = 120;
@@ -356,5 +392,165 @@ final class Assets
         }
 
         return self::JS_VUE_VENDOR;
+    }
+
+    public static function pagesIblockId(): int
+    {
+        return max(0, (int)Option::get(self::MODULE_ID, self::OPT_PAGES_IBLOCK_ID, '0'));
+    }
+
+    public static function mainIblockSliderId(): int
+    {
+        return max(0, (int)Option::get(self::MODULE_ID, self::OPT_MAIN_IBLOCK_SLIDER_ID, '0'));
+    }
+
+    public static function mainIblockAdvantagesId(): int
+    {
+        return max(0, (int)Option::get(self::MODULE_ID, self::OPT_MAIN_IBLOCK_ADVANTAGES_ID, '0'));
+    }
+
+    public static function mainIblockAboutId(): int
+    {
+        return max(0, (int)Option::get(self::MODULE_ID, self::OPT_MAIN_IBLOCK_ABOUT_ID, '0'));
+    }
+
+    public static function mainIblockSeoId(): int
+    {
+        return max(0, (int)Option::get(self::MODULE_ID, self::OPT_MAIN_IBLOCK_SEO_ID, '0'));
+    }
+
+    public static function homeSectionsLimit(): int
+    {
+        $limit = (int)Option::get(
+            self::MODULE_ID,
+            self::OPT_HOME_SECTIONS_LIMIT,
+            (string)self::DEFAULT_HOME_SECTIONS_LIMIT
+        );
+
+        return $limit > 0 ? $limit : self::DEFAULT_HOME_SECTIONS_LIMIT;
+    }
+
+    public static function homeSectionsUfShowCode(): string
+    {
+        $code = trim((string)Option::get(
+            self::MODULE_ID,
+            self::OPT_HOME_SECTIONS_UF_SHOW,
+            self::DEFAULT_HOME_SECTIONS_UF_SHOW
+        ));
+
+        return $code !== '' ? $code : self::DEFAULT_HOME_SECTIONS_UF_SHOW;
+    }
+
+    public static function homeSectionsUfSortCode(): string
+    {
+        $code = trim((string)Option::get(
+            self::MODULE_ID,
+            self::OPT_HOME_SECTIONS_UF_SORT,
+            self::DEFAULT_HOME_SECTIONS_UF_SORT
+        ));
+
+        return $code !== '' ? $code : self::DEFAULT_HOME_SECTIONS_UF_SORT;
+    }
+
+    public static function defaultHomeSectionsUfShowCode(): string
+    {
+        return self::DEFAULT_HOME_SECTIONS_UF_SHOW;
+    }
+
+    public static function defaultHomeSectionsUfSortCode(): string
+    {
+        return self::DEFAULT_HOME_SECTIONS_UF_SORT;
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public static function pagesViewFieldMap(): array
+    {
+        return self::decodeFieldMapOption(
+            self::OPT_PAGES_VIEW_FIELD_MAP,
+            [
+                'title' => 'NAME',
+                'body' => 'DETAIL_TEXT',
+                'metaTitle' => 'PROPERTY_META_TITLE',
+                'metaDescription' => 'PROPERTY_META_DESCRIPTION',
+                'breadcrumbTitle' => 'PROPERTY_BREADCRUMB_TITLE',
+            ]
+        );
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public static function homeViewFieldMap(): array
+    {
+        return self::decodeFieldMapOption(
+            self::OPT_HOME_VIEW_FIELD_MAP,
+            [
+                'slider' => [
+                    'image' => 'PREVIEW_PICTURE',
+                    'link' => 'PROPERTY_LINK',
+                    'caption' => 'PROPERTY_CAPTION',
+                ],
+                'advantages' => [
+                    'title' => 'NAME',
+                    'text' => 'PROPERTY_TEXT',
+                    'icon' => 'PROPERTY_ICON',
+                ],
+                'about' => [
+                    'title' => 'NAME',
+                    'body' => 'DETAIL_TEXT',
+                    'image' => 'PROPERTY_ABOUT_IMAGE',
+                ],
+                'seo' => [
+                    'body' => 'DETAIL_TEXT',
+                ],
+            ],
+            true
+        );
+    }
+
+    public static function homeShowSlider(): bool
+    {
+        return Option::get(self::MODULE_ID, self::OPT_HOME_SHOW_SLIDER, 'Y') === 'Y';
+    }
+
+    public static function homeShowAdvantages(): bool
+    {
+        return Option::get(self::MODULE_ID, self::OPT_HOME_SHOW_ADVANTAGES, 'Y') === 'Y';
+    }
+
+    public static function homeShowAbout(): bool
+    {
+        return Option::get(self::MODULE_ID, self::OPT_HOME_SHOW_ABOUT, 'Y') === 'Y';
+    }
+
+    public static function homeShowSeo(): bool
+    {
+        return Option::get(self::MODULE_ID, self::OPT_HOME_SHOW_SEO, 'Y') === 'Y';
+    }
+
+    public static function homeShowCatalog(): bool
+    {
+        return Option::get(self::MODULE_ID, self::OPT_HOME_SHOW_CATALOG, 'Y') === 'Y';
+    }
+
+    /**
+     * @param array<string, string> $default
+     * @return array<string, mixed>
+     */
+    private static function decodeFieldMapOption(string $optionName, array $default, bool $nested = false): array
+    {
+        $raw = (string)Option::get(self::MODULE_ID, $optionName, '');
+        if ($raw === '') {
+            return $default;
+        }
+
+        $decoded = json_decode($raw, true);
+        if (!is_array($decoded)) {
+            return $default;
+        }
+
+        return $nested ? array_replace_recursive($default, $decoded) : array_merge($default, $decoded);
     }
 }

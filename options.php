@@ -10,6 +10,9 @@ use MyApp\Catalog\Service\ProductFilterIndexService;
 use MyApp\Catalog\Service\ProductFilterIndexJobService;
 use MyApp\Catalog\Service\CatalogSearchIndexService;
 use MyApp\Catalog\Service\CatalogSearchIndexJobService;
+use MyApp\Catalog\Service\ContentPageService;
+use MyApp\Catalog\Service\HomeMainContentService;
+use MyApp\Catalog\Install\CatalogContentIblockInstaller;
 
 /**
  * @global CUser $USER
@@ -188,6 +191,68 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && check_bitrix_sessid()) {
         Option::set($moduleId, $optCatalogSearchBackend, $postedBackend);
     }
 
+    foreach ([
+        Assets::OPT_PAGES_IBLOCK_ID,
+        Assets::OPT_MAIN_IBLOCK_SLIDER_ID,
+        Assets::OPT_MAIN_IBLOCK_ADVANTAGES_ID,
+        Assets::OPT_MAIN_IBLOCK_ABOUT_ID,
+        Assets::OPT_MAIN_IBLOCK_SEO_ID,
+    ] as $optIblockId) {
+        if (array_key_exists($optIblockId, $_POST)) {
+            Option::set($moduleId, $optIblockId, (string)max(0, (int)$_POST[$optIblockId]));
+        }
+    }
+
+    if (array_key_exists(Assets::OPT_PAGES_VIEW_FIELD_MAP, $_POST)) {
+        $raw = trim((string)$_POST[Assets::OPT_PAGES_VIEW_FIELD_MAP]);
+        if ($raw !== '' && json_decode($raw, true) !== null) {
+            Option::set($moduleId, Assets::OPT_PAGES_VIEW_FIELD_MAP, $raw);
+        }
+    }
+
+    if (array_key_exists(Assets::OPT_HOME_VIEW_FIELD_MAP, $_POST)) {
+        $raw = trim((string)$_POST[Assets::OPT_HOME_VIEW_FIELD_MAP]);
+        if ($raw !== '' && json_decode($raw, true) !== null) {
+            Option::set($moduleId, Assets::OPT_HOME_VIEW_FIELD_MAP, $raw);
+        }
+    }
+
+    if (array_key_exists(Assets::OPT_HOME_SECTIONS_LIMIT, $_POST)) {
+        Option::set(
+            $moduleId,
+            Assets::OPT_HOME_SECTIONS_LIMIT,
+            (string)max(1, (int)$_POST[Assets::OPT_HOME_SECTIONS_LIMIT])
+        );
+    }
+
+    if (array_key_exists(Assets::OPT_HOME_SECTIONS_UF_SHOW, $_POST)) {
+        $uf = trim((string)$_POST[Assets::OPT_HOME_SECTIONS_UF_SHOW]);
+        if ($uf !== '' && preg_match('/^[A-Za-z0-9_]+$/', $uf)) {
+            Option::set($moduleId, Assets::OPT_HOME_SECTIONS_UF_SHOW, $uf);
+        }
+    }
+
+    if (array_key_exists(Assets::OPT_HOME_SECTIONS_UF_SORT, $_POST)) {
+        $uf = trim((string)$_POST[Assets::OPT_HOME_SECTIONS_UF_SORT]);
+        if ($uf !== '' && preg_match('/^[A-Za-z0-9_]+$/', $uf)) {
+            Option::set($moduleId, Assets::OPT_HOME_SECTIONS_UF_SORT, $uf);
+        }
+    }
+
+    foreach ([
+        Assets::OPT_HOME_SHOW_SLIDER,
+        Assets::OPT_HOME_SHOW_ADVANTAGES,
+        Assets::OPT_HOME_SHOW_ABOUT,
+        Assets::OPT_HOME_SHOW_SEO,
+        Assets::OPT_HOME_SHOW_CATALOG,
+    ] as $optHomeFlag) {
+        Option::set($moduleId, $optHomeFlag, isset($_POST[$optHomeFlag]) ? 'Y' : 'N');
+    }
+
+    CatalogContentIblockInstaller::ensureCatalogSectionUserFields();
+    ContentPageService::clearCache();
+    HomeMainContentService::clearCache();
+
     CatalogService::clearCatalogDataCache();
     if (CatalogService::filtersConfigHash() !== $filtersConfigHashBefore) {
         CatalogService::markFilterSnapshotsForRebuild();
@@ -272,6 +337,16 @@ $aTabs = [
         'TAB' => Loc::getMessage('MYAPP_CATALOG_OPT_TAB_SEARCH'),
         'TITLE' => Loc::getMessage('MYAPP_CATALOG_OPT_TAB_SEARCH_TITLE'),
     ],
+    [
+        'DIV' => 'edit5',
+        'TAB' => Loc::getMessage('MYAPP_CATALOG_OPT_TAB_CONTENT'),
+        'TITLE' => Loc::getMessage('MYAPP_CATALOG_OPT_TAB_CONTENT_TITLE'),
+    ],
+    [
+        'DIV' => 'edit6',
+        'TAB' => Loc::getMessage('MYAPP_CATALOG_OPT_TAB_HOME'),
+        'TITLE' => Loc::getMessage('MYAPP_CATALOG_OPT_TAB_HOME_TITLE'),
+    ],
 ];
 
 $tabControl = new CAdminTabControl('tabControl', $aTabs);
@@ -279,6 +354,10 @@ if ((string)($_REQUEST['tabControl_active_tab'] ?? '') === 'edit3') {
     $tabControl->selectedTab = 'edit3';
 } elseif ((string)($_REQUEST['tabControl_active_tab'] ?? '') === 'edit4') {
     $tabControl->selectedTab = 'edit4';
+} elseif ((string)($_REQUEST['tabControl_active_tab'] ?? '') === 'edit5') {
+    $tabControl->selectedTab = 'edit5';
+} elseif ((string)($_REQUEST['tabControl_active_tab'] ?? '') === 'edit6') {
+    $tabControl->selectedTab = 'edit6';
 } elseif (
     !empty($_POST['myapp_filter_snapshot_action'])
     || (string)($_REQUEST['tabControl_active_tab'] ?? '') === 'edit2'
@@ -539,6 +618,10 @@ $tabControl->Begin();
     include __DIR__ . '/options/filter_index_tab.php';
     $tabControl->BeginNextTab();
     include __DIR__ . '/options/search_index_tab.php';
+    $tabControl->BeginNextTab();
+    include __DIR__ . '/options/content_pages_tab.php';
+    $tabControl->BeginNextTab();
+    include __DIR__ . '/options/home_tab.php';
     $tabControl->Buttons();
     ?>
     <input type="submit" class="adm-btn-save" name="save" value="<?= Loc::getMessage('MAIN_SAVE') ?>">

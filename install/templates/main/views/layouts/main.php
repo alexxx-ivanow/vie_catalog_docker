@@ -11,6 +11,10 @@ $data_order = is_array($data_order ?? null) ? $data_order : [];
 $data_auth_confirm = is_array($data_auth_confirm ?? null) ? $data_auth_confirm : [];
 $data_auth_change_password = is_array($data_auth_change_password ?? null) ? $data_auth_change_password : [];
 $data_search = is_array($data_search ?? null) ? $data_search : [];
+$data_page = is_array($data_page ?? null) ? $data_page : [];
+$data_home = is_array($data_home ?? null) ? $data_home : [];
+$contentPageTitle = (string)($contentPageTitle ?? '');
+$metaDescription = (string)($metaDescription ?? '');
 $sectionPagination = is_array($sectionPagination ?? null) ? $sectionPagination : [];
 $sectionFilter = is_array($sectionFilter ?? null) ? $sectionFilter : [];
 $apiBase = (string)($apiBase ?? '/vue_catalog/api/v1/');
@@ -29,6 +33,9 @@ $showBreadcrumbs = ($showBreadcrumbs ?? true) !== false;
     <link rel="stylesheet" href="/local/templates/assets/css/style.css">
 
     <title><?= htmlspecialcharsbx($pageTitle) ?></title>
+    <?php if ($metaDescription !== ''): ?>
+        <meta name="description" content="<?= htmlspecialcharsbx($metaDescription) ?>">
+    <?php endif; ?>
 
     <?php if ($useBitrixVue && $bitrixAssetJs !== ''): ?>
         <?= $bitrixAssetJs ?>
@@ -103,7 +110,10 @@ $showBreadcrumbs = ($showBreadcrumbs ?? true) !== false;
         page: {
             type: <?= json_encode($pageType, JSON_UNESCAPED_UNICODE) ?>,
             section_id: <?= $sectionId ?>,
+            content_title: <?= json_encode($contentPageTitle, JSON_UNESCAPED_UNICODE) ?>,
         },
+        pageContent: <?= json_encode($data_page, JSON_UNESCAPED_UNICODE) ?>,
+        home: <?= json_encode($data_home, JSON_UNESCAPED_UNICODE) ?>,
         catalog: {
             items: <?= json_encode($data_sections, JSON_UNESCAPED_UNICODE) ?>,
             total: <?= count($data_sections) ?>,

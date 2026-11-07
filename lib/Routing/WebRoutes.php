@@ -7,6 +7,7 @@ use MyApp\Catalog\Config\Assets;
 use MyApp\Catalog\Controller\ApiController;
 use MyApp\Catalog\Controller\CartController;
 use MyApp\Catalog\Controller\CatalogController;
+use MyApp\Catalog\Controller\ContentPageController;
 use MyApp\Catalog\Controller\CheckoutApiController;
 use MyApp\Catalog\Controller\HomeController;
 use MyApp\Catalog\Controller\OrderController;
@@ -24,6 +25,8 @@ class WebRoutes
     {
         // ---------- Страницы (HTML) ----------
         $routes->get('/', [HomeController::class, 'index']);
+        $routes->get('/pages/{code}', [ContentPageController::class, 'index'])
+            ->where('code', '[a-z0-9_-]+');
         $routes->get('/catalog/', [CatalogController::class, 'index']);
         /*$routes->get('/catalog/{code}', [CatalogController::class, 'section'])
             ->where('code', '[a-zA-Z0-9_-]+');*/

@@ -5,6 +5,7 @@ use Bitrix\Main\Loader;
 Loader::registerAutoLoadClasses('myapp.catalog', [
     'MyApp\\Catalog\\Controller\\BasePageController' => 'lib/Controller/BasePageController.php',
     'MyApp\\Catalog\\Controller\\HomeController' => 'lib/Controller/HomeController.php',
+    'MyApp\\Catalog\\Controller\\ContentPageController' => 'lib/Controller/ContentPageController.php',
     'MyApp\\Catalog\\Controller\\CatalogController' => 'lib/Controller/CatalogController.php',
     'MyApp\\Catalog\\Controller\\ProductController' => 'lib/Controller/ProductController.php',
     'MyApp\\Catalog\\Controller\\SearchController' => 'lib/Controller/SearchController.php',
@@ -21,6 +22,9 @@ Loader::registerAutoLoadClasses('myapp.catalog', [
     'MyApp\\Catalog\\Checkout\\DeliveryUiResolver' => 'lib/Checkout/DeliveryUiResolver.php',
     'MyApp\\Catalog\\Service\\CheckoutUserService' => 'lib/Service/CheckoutUserService.php',
     'MyApp\\Catalog\\Service\\HomeService' => 'lib/Service/HomeService.php',
+    'MyApp\\Catalog\\Service\\HomeMainContentService' => 'lib/Service/HomeMainContentService.php',
+    'MyApp\\Catalog\\Service\\ContentPageService' => 'lib/Service/ContentPageService.php',
+    'MyApp\\Catalog\\Service\\IblockContentReader' => 'lib/Service/IblockContentReader.php',
     'MyApp\\Catalog\\Service\\CatalogService' => 'lib/Service/CatalogService.php',
     'MyApp\\Catalog\\Service\\CatalogSkuService' => 'lib/Service/CatalogSkuService.php',
     'MyApp\\Catalog\\Service\\CartService' => 'lib/Service/CartService.php',
@@ -49,6 +53,8 @@ Loader::registerAutoLoadClasses('myapp.catalog', [
     'MyApp\\Catalog\\Service\\ProductFilterIndexJobService' => 'lib/Service/ProductFilterIndexJobService.php',
     'MyApp\\Catalog\\Service\\ProductFilterQueryService' => 'lib/Service/ProductFilterQueryService.php',
     'MyApp\\Catalog\\Install\\CatalogSearchIndexSchema' => 'lib/Install/CatalogSearchIndexSchema.php',
+    'MyApp\\Catalog\\Install\\CatalogContentIblockInstaller' => 'lib/Install/CatalogContentIblockInstaller.php',
+    'MyApp\\Catalog\\Install\\CatalogSiteBootstrapInstaller' => 'lib/Install/CatalogSiteBootstrapInstaller.php',
     'MyApp\\Catalog\\Model\\SearchIndexMetaTable' => 'lib/Model/SearchIndexMetaTable.php',
     'MyApp\\Catalog\\Model\\SearchIndexDocumentTable' => 'lib/Model/SearchIndexDocumentTable.php',
     'MyApp\\Catalog\\Model\\SearchIndexTokenTable' => 'lib/Model/SearchIndexTokenTable.php',
@@ -73,6 +79,7 @@ Loader::registerAutoLoadClasses('myapp.catalog', [
 \MyApp\Catalog\Install\FilterAggregateSchema::ensureRebuildInfrastructure();
 \MyApp\Catalog\Install\ProductFilterIndexSchema::ensureInfrastructure();
 \MyApp\Catalog\Install\CatalogSearchIndexSchema::ensureInfrastructure();
+\MyApp\Catalog\Install\CatalogContentIblockInstaller::ensureInfrastructure();
 \MyApp\Catalog\Service\FilterRebuildJobService::ensureAgentRegistered();
 \MyApp\Catalog\Service\ProductFilterIndexJobService::ensureAgentRegistered();
 \MyApp\Catalog\Service\CatalogSearchIndexJobService::ensureAgentRegistered();

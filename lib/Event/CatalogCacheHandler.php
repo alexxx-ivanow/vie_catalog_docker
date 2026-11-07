@@ -12,6 +12,8 @@ use MyApp\Catalog\Service\ProductFilterIndexService;
 use MyApp\Catalog\Service\CatalogSearchIndexService;
 use MyApp\Catalog\Service\CatalogService;
 use MyApp\Catalog\Service\CatalogSkuService;
+use MyApp\Catalog\Service\ContentPageService;
+use MyApp\Catalog\Service\HomeMainContentService;
 
 final class CatalogCacheHandler
 {
@@ -167,6 +169,12 @@ final class CatalogCacheHandler
     public static function onAfterElementChange(array &$fields): void
     {
         $iblockId = self::resolveIblockIdFromFields($fields);
+        if (self::isCmsIblock($iblockId)) {
+            self::invalidateCmsCaches($iblockId);
+
+            return;
+        }
+
         if (!self::isCatalogOrOffersIblock($iblockId)) {
             return;
         }
@@ -180,6 +188,12 @@ final class CatalogCacheHandler
     public static function onAfterElementUpdate(array &$fields): void
     {
         $iblockId = self::resolveIblockIdFromFields($fields);
+        if (self::isCmsIblock($iblockId)) {
+            self::invalidateCmsCaches($iblockId);
+
+            return;
+        }
+
         if (!self::isCatalogOrOffersIblock($iblockId)) {
             return;
         }
@@ -202,6 +216,12 @@ final class CatalogCacheHandler
     public static function onAfterElementDelete(array &$fields): void
     {
         $iblockId = self::resolveIblockIdFromFields($fields);
+        if (self::isCmsIblock($iblockId)) {
+            self::invalidateCmsCaches($iblockId);
+
+            return;
+        }
+
         if (!self::isCatalogOrOffersIblock($iblockId)) {
             return;
         }
@@ -242,7 +262,17 @@ final class CatalogCacheHandler
     ): void {
         $elementId = (int)$elementId;
         $iblockId = (int)$iblockId;
-        if ($elementId <= 0 || !self::isCatalogOrOffersIblock($iblockId)) {
+        if ($elementId <= 0) {
+            return;
+        }
+
+        if (self::isCmsIblock($iblockId)) {
+            self::invalidateCmsCaches($iblockId);
+
+            return;
+        }
+
+        if (!self::isCatalogOrOffersIblock($iblockId)) {
             return;
         }
 
@@ -290,6 +320,7 @@ final class CatalogCacheHandler
         $sectionId = (int)($fields['ID'] ?? 0);
         if ($sectionId > 0) {
             CatalogService::invalidateBySection($sectionId, false);
+            HomeMainContentService::clearCache();
         }
     }
 
@@ -314,6 +345,7 @@ final class CatalogCacheHandler
         }
 
         CatalogService::invalidateBySection($sectionId, false);
+        HomeMainContentService::clearCache();
     }
 
     public static function onAfterSectionDelete(array &$fields): void
@@ -337,6 +369,7 @@ final class CatalogCacheHandler
         }
 
         CatalogService::invalidateBySection($sectionId, true);
+        HomeMainContentService::clearCache();
     }
 
     public static function onPriceChange(array &$fields): void
@@ -500,5 +533,31 @@ final class CatalogCacheHandler
         ])->fetch();
 
         return (int)($row['IBLOCK_ID'] ?? 0);
+    }
+
+    private static function isCmsIblock(int $iblockId): bool
+    {
+        if ($iblockId <= 0) {
+            return false;
+        }
+
+        $cmsIds = [
+            Assets::pagesIblockId(),
+            Assets::mainIblockSliderId(),
+            Assets::mainIblockAdvantagesId(),
+            Assets::mainIblockAboutId(),
+            Assets::mainIblockSeoId(),
+        ];
+
+        return in_array($iblockId, $cmsIds, true);
+    }
+
+    private static function invalidateCmsCaches(int $iblockId): void
+    {
+        if ($iblockId === Assets::pagesIblockId()) {
+            ContentPageService::clearCache();
+        }
+
+        HomeMainContentService::clearCache();
     }
 }

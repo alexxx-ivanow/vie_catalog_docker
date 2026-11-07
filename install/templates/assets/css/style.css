@@ -1938,6 +1938,112 @@ img {
     object-position: center;
 }
 
+.home-hero--slider .home-hero__track {
+    position: relative;
+}
+
+.home-hero--slider .home-hero__slide {
+    display: none;
+}
+
+.home-hero--slider .home-hero__slide--active {
+    display: block;
+}
+
+.home-hero--slider-nav {
+    position: relative;
+}
+
+.home-hero__nav {
+    position: absolute;
+    top: 50%;
+    z-index: 5;
+    pointer-events: auto;
+    transform: translateY(-50%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    font-size: 28px;
+    line-height: 1;
+    color: #1a1a1a;
+    background: rgb(255 255 255 / 0.88);
+    box-shadow: 0 2px 8px rgb(0 0 0 / 0.12);
+    cursor: pointer;
+    transition: background 0.15s ease, transform 0.15s ease;
+}
+
+.home-hero__nav:hover {
+    background: #fff;
+    transform: translateY(-50%) scale(1.05);
+}
+
+.home-hero__nav--prev {
+    left: 16px;
+}
+
+.home-hero__nav--next {
+    right: 16px;
+}
+
+.home-hero__dots {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 14px;
+    z-index: 2;
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+}
+
+.home-hero__dot {
+    width: 10px;
+    height: 10px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: rgb(255 255 255 / 0.55);
+    cursor: pointer;
+    transition: background 0.15s ease, transform 0.15s ease;
+}
+
+.home-hero__dot--active {
+    background: #fff;
+    transform: scale(1.15);
+}
+
+.home-hero__caption {
+    margin: 12px 0 0;
+    text-align: center;
+    font-size: 18px;
+    color: var(--color-text, #333);
+}
+
+.home-hero__link {
+    display: block;
+}
+
+.content-page__title {
+    margin: 0 0 20px;
+    font-size: clamp(22px, 3vw, 32px);
+    font-weight: 600;
+}
+
+.content-page__body {
+    line-height: 1.6;
+}
+
+.home-seo__body {
+    font-size: 15px;
+    line-height: 1.6;
+    color: var(--color-text-muted, #666);
+}
+
 .home-section__title {
     margin: 0 0 24px;
     font-size: clamp(22px, 3vw, 32px);

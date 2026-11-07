@@ -35,6 +35,7 @@ class myapp_catalog extends CModule
     public function DoInstall()
     {
         ModuleManager::registerModule($this->MODULE_ID);
+        $this->installContentInfrastructure();
         $this->InstallDB();
         $this->installTemplates();
         $this->installRoutes();
@@ -47,6 +48,7 @@ class myapp_catalog extends CModule
         $this->uninstallEvents();
         $this->uninstallAdminFiles();
         $this->uninstallRoutes();
+        $this->uninstallContentInfrastructure();
         $this->UnInstallDB();
         Option::delete($this->MODULE_ID);
         ModuleManager::unRegisterModule($this->MODULE_ID);
@@ -102,6 +104,52 @@ class myapp_catalog extends CModule
         if (is_file($indexSchemaFile)) {
             require_once $indexSchemaFile;
         }
+        $contentFile = dirname(__DIR__) . '/lib/Install/CatalogContentIblockInstaller.php';
+        if (is_file($contentFile)) {
+            require_once $contentFile;
+        }
+        $bootstrapFile = dirname(__DIR__) . '/lib/Install/CatalogSiteBootstrapInstaller.php';
+        if (is_file($bootstrapFile)) {
+            require_once $bootstrapFile;
+        }
+        $assetsFile = dirname(__DIR__) . '/lib/Config/Assets.php';
+        if (is_file($assetsFile)) {
+            require_once $assetsFile;
+        }
+    }
+
+    private function installContentInfrastructure(): void
+    {
+        global $APPLICATION;
+
+        $this->registerInstallAutoload();
+        if (!\Bitrix\Main\Loader::includeModule('iblock')) {
+            if (isset($APPLICATION)) {
+                $APPLICATION->ThrowException('myapp.catalog: для установки нужен модуль iblock.');
+            }
+
+            return;
+        }
+
+        \Bitrix\Main\Loader::includeModule($this->MODULE_ID);
+        \MyApp\Catalog\Install\CatalogContentIblockInstaller::ensureInfrastructure();
+
+        if (!\MyApp\Catalog\Install\CatalogContentIblockInstaller::isInstallationComplete()) {
+            $errors = \MyApp\Catalog\Install\CatalogContentIblockInstaller::getLastInstallErrors();
+            $message = 'myapp.catalog: не все инфоблоки контента созданы.';
+            if ($errors !== []) {
+                $message .= ' ' . implode(' ', $errors);
+            }
+            if (isset($APPLICATION)) {
+                $APPLICATION->ThrowException($message);
+            }
+        }
+    }
+
+    private function uninstallContentInfrastructure(): void
+    {
+        $this->registerInstallAutoload();
+        \MyApp\Catalog\Install\CatalogSiteBootstrapInstaller::tryRestoreRootIndex();
     }
 
     public function installEvents(): void

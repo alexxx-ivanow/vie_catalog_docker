@@ -3,7 +3,7 @@
 namespace MyApp\Catalog\Controller;
 
 use MyApp\Catalog\Config\Templates;
-use MyApp\Catalog\Service\HomeService;
+use MyApp\Catalog\Service\HomeMainContentService;
 
 class HomeController extends BasePageController
 {
@@ -18,15 +18,19 @@ class HomeController extends BasePageController
 
     public function indexAction()
     {
+        $home = HomeMainContentService::buildHomePayload();
+        $sections = is_array($home['sections'] ?? null) ? $home['sections'] : [];
+
         $initialState = [
             'pageTitle' => 'Интернет-магазин',
             'pageType' => 'home',
             'showBreadcrumbs' => false,
             'contentView' => Templates::viewPath('home/index.php'),
-            'data_sections' => HomeService::getRootSections(),
+            'data_sections' => $sections,
             'data_section' => [],
             'data_product' => [],
-            'jsEntry' => 'app-home.js',
+            'data_home' => $home,
+            'jsEntry' => count($sections) > 0 ? 'app-home.js' : '',
         ];
 
         return $this->renderPage($initialState);

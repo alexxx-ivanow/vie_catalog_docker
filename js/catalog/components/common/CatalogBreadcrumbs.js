@@ -24,12 +24,20 @@ export default {
                 );
                 const productId = Number(window.__PAGE_DATA__?.product?.data?.ID || 0);
                 const pageType = String(page.type || 'catalog');
+                const contentPageTitle = String(
+                    page.content_title ||
+                    window.__PAGE_DATA__?.page?.content_title ||
+                    ''
+                );
 
                 const params = new URLSearchParams({
                     pageType,
                     section: String(sectionId),
                     product: String(productId),
                 });
+                if (contentPageTitle !== '') {
+                    params.set('contentPageTitle', contentPageTitle);
+                }
 
                 const res = await fetch(catalogApiUrl('catalog/breadcrumbs') + '?' + params.toString(), {
                     headers: getReadHeaders(),
