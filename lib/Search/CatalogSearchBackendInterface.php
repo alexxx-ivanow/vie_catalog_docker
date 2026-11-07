@@ -21,6 +21,7 @@ interface CatalogSearchBackendInterface
     public function indexProductLexemes(int $productId, array $lexemeWeights): void;
 
     /**
+     * @param bool $requireTotalCount если false, total может быть -1 (клиент подставляет из кеша первой страницы)
      * @return array{
      *   product_ids: list<int>,
      *   total: int,
@@ -28,7 +29,7 @@ interface CatalogSearchBackendInterface
      *   search_mode: string
      * }
      */
-    public function searchProductIds(string $query, int $page, int $limit): array;
+    public function searchProductIds(string $query, int $page, int $limit, bool $requireTotalCount = true): array;
 
     /**
      * Кандидаты слов для подсказки «возможно вы имели в виду» (частые лексемы с префиксом).

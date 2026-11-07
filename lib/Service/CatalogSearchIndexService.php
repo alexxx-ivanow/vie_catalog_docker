@@ -19,6 +19,9 @@ final class CatalogSearchIndexService
 
     private const OPT_READY = 'catalog_search_index_ready';
 
+    /** Инкремент при любом изменении поискового индекса — ключ кеша total (см. CatalogSearchTotalCacheService). */
+    private const OPT_SEARCH_TOTAL_CACHE_EPOCH = 'catalog_search_total_cache_epoch';
+
     public const WEIGHT_NAME = 10;
 
     public const WEIGHT_PARENT_PROP = 6;
@@ -43,6 +46,17 @@ final class CatalogSearchIndexService
             . '|' . CatalogSearchBackendFactory::getBackendId()
             . '|v3_lexeme_trigram'
         );
+    }
+
+    public static function getSearchTotalCacheEpoch(): int
+    {
+        return max(0, (int)Option::get(self::MODULE_ID, self::OPT_SEARCH_TOTAL_CACHE_EPOCH, '0'));
+    }
+
+    private static function bumpSearchTotalCacheEpoch(): void
+    {
+        $next = self::getSearchTotalCacheEpoch() + 1;
+        Option::set(self::MODULE_ID, self::OPT_SEARCH_TOTAL_CACHE_EPOCH, (string)$next);
     }
 
     private static function searchBackend(): CatalogSearchBackendInterface
@@ -125,6 +139,7 @@ final class CatalogSearchIndexService
         CatalogSearchIndexSchema::ensureInfrastructure();
 
         self::searchBackend()->removeProductIndex($productId);
+        self::bumpSearchTotalCacheEpoch();
     }
 
     public static function rebuildProduct(int $productId): void
@@ -137,7 +152,7 @@ final class CatalogSearchIndexService
         CatalogSearchIndexSchema::ensureInfrastructure();
         Loader::includeModule('iblock');
 
-        self::removeProduct($productId);
+        self::searchBackend()->removeProductIndex($productId);
 
         $iblockId = Assets::catalogIblockId();
         $row = Application::getConnection()->query("
@@ -148,6 +163,8 @@ final class CatalogSearchIndexService
         ")->fetch();
 
         if (!$row || (string)$row['ACTIVE'] !== 'Y') {
+            self::bumpSearchTotalCacheEpoch();
+
             return;
         }
 
@@ -213,6 +230,7 @@ final class CatalogSearchIndexService
         ]);
 
         self::searchBackend()->indexProductLexemes($productId, $lexemeWeights);
+        self::bumpSearchTotalCacheEpoch();
     }
 
     /**
@@ -479,6 +497,8 @@ final class CatalogSearchIndexService
             'LAST_ERROR' => $lastError !== null && $lastError !== '' ? $lastError : null,
         ]);
         self::markReady();
+        self::bumpSearchTotalCacheEpoch();
+        CatalogSearchTotalCacheService::clearCache();
     }
 
     /**
@@ -551,5 +571,7 @@ final class CatalogSearchIndexService
             'TOKENS_COUNT' => 0,
             'LAST_ERROR' => null,
         ]);
+        self::bumpSearchTotalCacheEpoch();
+        CatalogSearchTotalCacheService::clearCache();
     }
 }

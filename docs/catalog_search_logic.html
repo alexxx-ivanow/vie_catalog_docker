@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Поиск по каталогу — логика работы (myapp.catalog)</title>
+    <style>
+        :root {
+            --text: #1a1a1a;
+            --muted: #555;
+            --border: #ddd;
+            --code-bg: #f5f5f7;
+            --accent: #0b57d0;
+        }
+        body {
+            font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.55;
+            color: var(--text);
+            max-width: 52rem;
+            margin: 0 auto;
+            padding: 1.5rem 1.25rem 3rem;
+        }
+        h1 { font-size: 1.75rem; margin-top: 0; }
+        h2 { font-size: 1.25rem; margin-top: 2rem; border-bottom: 1px solid var(--border); padding-bottom: 0.35rem; }
+        h3 { font-size: 1.1rem; margin-top: 1.5rem; }
+        p { margin: 0.75rem 0; }
+        ul { margin: 0.5rem 0 0.75rem; padding-left: 1.35rem; }
+        li { margin: 0.35rem 0; }
+        hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+        strong { font-weight: 600; }
+        code {
+            font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+            font-size: 0.92em;
+            background: var(--code-bg);
+            padding: 0.12em 0.35em;
+            border-radius: 4px;
+        }
+        a { color: var(--accent); }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.95rem;
+            margin: 1rem 0;
+        }
+        th, td {
+            border: 1px solid var(--border);
+            padding: 0.5rem 0.65rem;
+            text-align: left;
+            vertical-align: top;
+        }
+        th { background: var(--code-bg); font-weight: 600; }
+        .muted { color: var(--muted); font-size: 0.95rem; }
+        .toc { background: #fafafa; border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.25rem; margin: 1.25rem 0; }
+        .toc ul { list-style: none; padding-left: 0; }
+        .toc li { margin: 0.4rem 0; }
+    </style>
+</head>
+<body>
+
+<h1>Как устроен поиск по каталогу: простое описание</h1>
+
+<p>Документ для разработчиков и администраторов: <strong>какие таблицы</strong>, <strong>как строится индекс</strong> и <strong>как обрабатывается запрос</strong>. Технические термины вынесены в <a href="#glossary">глоссарий</a>.</p>
+
+<p class="muted">Подробнее в сжатом виде см. <code>catalog_search.md</code>; код — <code>CatalogSearchIndexService</code>, <code>MysqlLexemeTrigramSearchBackend</code>.</p>
+
+<div class="toc">
+    <strong>Содержание</strong>
+    <ul>
+        <li><a href="#engines">Два режима (движка)</a></li>
+        <li><a href="#tables">Какие таблицы задействованы</a></li>
+        <li><a href="#glossary">Глоссарий</a></li>
+        <li><a href="#index-build">Как строится поисковый индекс</a></li>
+        <li><a href="#search-flow">Как работает поиск по запросу</a></li>
+        <li><a href="#legacy">Кратко про legacy_token</a></li>
+        <li><a href="#filter">Связь с фильтром каталога</a></li>
+        <li><a href="#files">Файлы для чтения кода</a></li>
+    </ul>
+</div>
+
+<hr>
+
+<h2 id="engines">Два режима (движка)</h2>
+
+<p>В настройках модуля задаётся <strong>движок поиска</strong> (<code>catalog_search_backend</code>):</p>
+
+<table>
+    <thead>
+        <tr><th>Движок</th><th>Суть</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><strong><code>mysql_lexeme_trigram</code></strong> (основной)</td>
+            <td>Словарь слов + триграммы, можно искать <strong>подстроку внутри слова</strong> («грамм» внутри «триграмм»).</td>
+        </tr>
+        <tr>
+            <td><strong><code>legacy_token</code></strong></td>
+            <td>Старый вариант: токены привязаны к товару целиком, в основном <strong>начало слова</strong> + при отсутствии результатов <strong>fuzzy</strong> (похожие слова).</td>
+        </tr>
+    </tbody>
+</table>
+
+<p>Дальше по тексту, если не сказано иначе, речь о <strong><code>mysql_lexeme_trigram</code></strong>.</p>
+
+<hr>
+
+<h2 id="tables">Какие таблицы задействованы</h2>
+
+<table>
+    <thead>
+        <tr><th>Таблица</th><th>Зачем</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>myapp_catalog_search_meta</code></td>
+            <td>Одна строка настроек: версия индекса, хеш конфигурации, счётчики, дата полной синхронизации. По ней понимают, <strong>готов</strong> ли поиск и <strong>совпадает ли</strong> конфиг с тем, под который собирали индекс.</td>
+        </tr>
+        <tr>
+            <td><code>myapp_catalog_search_document</code></td>
+            <td>Один ряд на <strong>родительский товар</strong>: нормализованное имя, «тело» для справки, сортировка, активность. Нужен, чтобы отфильтровать неактивные и дать <strong>бонус за совпадение в названии</strong>.</td>
+        </tr>
+        <tr>
+            <td><code>myapp_catalog_search_lexeme</code></td>
+            <td><strong>Словарь</strong>: каждая уникальная нормализованная строка-слово (лексема) один раз, с <code>ID</code>.</td>
+        </tr>
+        <tr>
+            <td><code>myapp_catalog_search_lexeme_trigram</code></td>
+            <td>У лексемы длины ≥ 3 символов — все <strong>триграммы</strong> (3 подряд символа UTF-8). По ним быстро находят кандидатов по <strong>фрагменту</strong> слова.</td>
+        </tr>
+        <tr>
+            <td><code>myapp_catalog_search_product_lexeme</code></td>
+            <td>Связь <strong>товар ↔ лексема</strong> + <strong>вес</strong> (насколько важно совпадение: имя, анонс, свойство и т.д.).</td>
+        </tr>
+        <tr>
+            <td><code>myapp_catalog_search_token</code></td>
+            <td>Только для <strong><code>legacy_token</code></strong>: старые пары товар + текстовый токен.</td>
+        </tr>
+        <tr>
+            <td><code>myapp_catalog_search_queue</code></td>
+            <td>Очередь товаров на <strong>переиндексацию</strong> после изменений.</td>
+        </tr>
+        <tr>
+            <td><code>myapp_catalog_search_job</code></td>
+            <td>Фоновые <strong>полные</strong> пересборки (job’ы в админке).</td>
+        </tr>
+    </tbody>
+</table>
+
+<p>Таблицы создаются автоматически при загрузке модуля (<code>CatalogSearchIndexSchema</code>).</p>
+
+<hr>
+
+<h2 id="glossary">Глоссарий</h2>
+
+<ul>
+    <li><strong>Нормализация текста</strong> — приведение к единому виду: без HTML, в нижнем регистре, «ё»→«е», лишняя пунктуация убрана, пробелы ровные. Так «Товар» и «товар» становятся одним и тем же для индекса и запроса.</li>
+    <li><strong>Токен (в запросе)</strong> — отдельное «слово» из пользовательской фразы после нормализации и <strong>разбиения по пробелам</strong>, с выбрасыванием <strong>стоп-слов</strong> (например «и», «в»). В многословном запросе между токенами действует логика <strong>AND</strong>: товар должен подойти <strong>по каждому</strong> токену.</li>
+    <li><strong>Лексема</strong> — нормализованный <strong>отрывок текста</strong>, который кладём в словарь и связываем с товаром. Обычно это то же, что <strong>слово</strong> из описания (буквы/цифры подряд).</li>
+    <li><strong>Дедуп (дедупликация)</strong> — если одно и то же слово встретилось в <strong>нескольких полях</strong> товара, в индекс идёт <strong>одна связь</strong> с <strong>максимальным весом</strong> среди источников.</li>
+    <li><strong>Триграмма</strong> — три символа подряд внутри строки (UTF-8). Пример: из слова «триграмм» получаются «три», «риг», «игр», … По триграммам ищут <strong>где может жить подстрока</strong>, не перебирая все товары подряд.</li>
+    <li><strong>Словарь (лексем)</strong> — таблица <strong>уникальных</strong> лексем. Триграммы хранят <strong>на лексеме</strong>, а не копируются на каждый товар.</li>
+    <li><strong>Инверсный индекс</strong> — структура «по ключу (триграмма / лексема) → список кандидатов», а не «товар → весь текст».</li>
+    <li><strong>Rare-first («сначала редкое»)</strong> — среди триграмм <strong>слова из запроса</strong> сначала берут ту, у которой <strong>меньше всего</strong> записей в таблице триграмм.</li>
+    <li><strong>Подтверждение (LOCATE)</strong> — после отбора кандидатов по триграммам проверяют, что <strong>подстрока запроса</strong> реально входит в текст <strong>лексемы</strong> в словаре.</li>
+    <li><strong>Вес (WEIGHT)</strong> — целое число важности: совпадение в <strong>названии</strong> весит выше, чем в <strong>детальном тексте</strong>. По токенам берётся <strong>максимальный</strong> вес среди подходящих лексем товара.</li>
+    <li><strong>Порог по сумме весов</strong> — слишком слабые совпадения отсекаются; порог зависит от <strong>числа слов в запросе</strong>.</li>
+    <li><strong>Бонус за имя</strong> — если токен запроса <strong>в начале названия</strong> или <strong>после пробела в названии</strong>, к счёту добавляется фиксированный бонус.</li>
+    <li><strong>Полная переиндексация</strong> — job перечитывает весь каталог и пересобирает индекс с нуля.</li>
+    <li><strong>Инкрементальная переиндексация</strong> — только изменённые товары попадают в <strong>очередь</strong>, воркер вызывает <code>rebuildProduct</code> по одному <code>PRODUCT_ID</code>.</li>
+</ul>
+
+<hr>
+
+<h2 id="index-build">Как строится поисковый индекс (пошагово)</h2>
+
+<h3>Когда запускается</h3>
+<ul>
+    <li><strong>Полная</strong> пересборка: задание в админке (вкладка поиска) или CLI-воркер.</li>
+    <li><strong>По одному товару</strong>: событие инвалидации каталога → очередь → <code>CatalogSearchIndexService::rebuildProduct</code>.</li>
+    <li><strong>Удаление товара</strong>: из индекса убираются связи и документ (<code>removeProduct</code>).</li>
+</ul>
+
+<h3>Этапы для одного активного товара (<code>rebuildProduct</code>)</h3>
+<ol>
+    <li><strong>Снять старый индекс товара</strong> — удаляются строки в <code>myapp_catalog_search_product_lexeme</code> для этого <code>PRODUCT_ID</code> и запись в <code>myapp_catalog_search_document</code> (через бэкенд).</li>
+    <li><strong>Прочитать данные из Bitrix</strong> — название, при необходимости PREVIEW/DETAIL, значения свойств родителя, тексты с торговых предложений (по настройкам).</li>
+    <li><strong>Нормализация и извлечение «слов»</strong> — лексемы из фрагментов; для длинных слов может добавляться укороченная «основа» с меньшим весом.</li>
+    <li><strong>Сбор карты «лексема → вес»</strong> — одна лексема из разных полей не дублируется: сохраняется <strong>больший</strong> вес.</li>
+    <li><strong>Запись документа</strong> в <code>myapp_catalog_search_document</code>.</li>
+    <li><strong>Запись в словарь и связей</strong> (<code>indexProductLexemes</code>): новая лексема → INSERT в словарь и триграммы (длина ≥ 3); связь товар–лексема–вес в <code>myapp_catalog_search_product_lexeme</code>.</li>
+    <li><strong>Мета и готовность</strong> — при полном job обновляются счётчики, хеш конфигурации, флаг готовности (<code>finalizeFullBuild</code>).</li>
+</ol>
+
+<h3>После полной пересборки</h3>
+<p>Ожидается, что в meta <code>CONFIG_HASH</code> = <code>searchConfigHash()</code> и <code>catalog_search_index_ready=Y</code>, иначе поиск может быть отключён до совпадения.</p>
+
+<hr>
+
+<h2 id="search-flow">Как работает поиск по запросу (<code>mysql_lexeme_trigram</code>)</h2>
+
+<p>Ниже — <strong>логическая</strong> цепочка; конкретный SQL может меняться.</p>
+
+<h3>Шаг 0. Проверки (<code>CatalogSearchService</code>)</h3>
+<ul>
+    <li>Индекс <strong>готов</strong> и конфиг не устарел.</li>
+    <li>Запрос после нормализации не короче 2 символов.</li>
+</ul>
+
+<h3>Шаг 1. Кеш числа результатов (опционально)</h3>
+<p>Для <strong>пагинации</strong>: на страницах после первой при наличии кеша <strong>total</strong> тяжёлый <code>COUNT(*)</code> в БД может не выполняться.</p>
+
+<h3>Шаг 2. Разбор запроса</h3>
+<ul>
+    <li>Нормализация той же схемой, что при индексации.</li>
+    <li><strong>Токены</strong> — слова без стоп-слов.</li>
+    <li>Между токенами — <strong>AND</strong>.</li>
+</ul>
+
+<h3>Шаг 3. Для каждого токена — лексемы в словаре</h3>
+<p><strong>Токен длиной ≥ 3:</strong> триграммы → rare-first → пересечение лексем → подтверждение <code>LOCATE</code> по <code>LEXEME_TEXT</code>.</p>
+<p><strong>Токен короче 3:</strong> точное совпадение или префикс в словаре.</p>
+<p>Если по токену лексем нет — ответ пустой.</p>
+
+<h3>Шаг 4–6. Товары, счёт, сортировка, страница</h3>
+<p>Пересечение по токенам на уровне товаров (SQL), максимальные веса по токенам, бонус за имя, порог, <code>ORDER BY</code> + <code>LIMIT</code>/<code>OFFSET</code>.</p>
+
+<h3>Шаг 7. <code>total</code></h3>
+<p>Отдельный <code>COUNT(*)</code>; может быть пропущен при кеше на page&gt;1.</p>
+
+<h3>Шаг 8. Карточки</h3>
+<p>По <code>PRODUCT_ID</code> подгружаются данные каталога для отображения.</p>
+
+<hr>
+
+<h2 id="legacy">Кратко про <code>legacy_token</code></h2>
+<ul>
+    <li>Индекс: <code>myapp_catalog_search_token</code> + документ.</li>
+    <li>Поиск: целой токен или начало (<code>TOKEN = …</code> / <code>LIKE 'q%'</code>).</li>
+    <li>При пустом strict — fuzzy для длинных токенов.</li>
+    <li>Подстрока <strong>внутри</strong> слова — не цель этого режима.</li>
+</ul>
+
+<hr>
+
+<h2 id="filter">Связь с фильтром каталога</h2>
+<p><strong>Индекс поиска</strong> и <strong>индекс фильтра</strong> (<code>filter_*</code>) — <strong>разные</strong> системы. «Свойства в фильтре» в опциях относятся к фильтру; поиск пересобирается по своим настройкам (<code>catalog_search_product_property_codes</code> и т.д.) и <code>searchConfigHash()</code>.</p>
+
+<hr>
+
+<h2 id="files">Файлы для чтения кода</h2>
+
+<table>
+    <thead>
+        <tr><th>Что</th><th>Файл</th></tr>
+    </thead>
+    <tbody>
+        <tr><td>Схема таблиц</td><td><code>CatalogSearchIndexSchema.php</code></td></tr>
+        <tr><td>Сбор индекса по товару</td><td><code>CatalogSearchIndexService.php</code></td></tr>
+        <tr><td>Поиск MySQL</td><td><code>MysqlLexemeTrigramSearchBackend.php</code></td></tr>
+        <tr><td>Нормализация, токены</td><td><code>CatalogSearchTextNormalizer.php</code></td></tr>
+        <tr><td>Фасад API</td><td><code>CatalogSearchService.php</code></td></tr>
+        <tr><td>Кеш total</td><td><code>CatalogSearchTotalCacheService.php</code></td></tr>
+    </tbody>
+</table>
+
+</body>
+</html>

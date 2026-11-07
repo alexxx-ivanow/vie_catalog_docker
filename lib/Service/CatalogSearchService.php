@@ -30,7 +30,8 @@ final class CatalogSearchService
             ];
         }
 
-        if (mb_strlen(CatalogSearchTextNormalizer::normalizeText($query), 'UTF-8') < 2) {
+        $normForCache = CatalogSearchTextNormalizer::normalizeText($query);
+        if (mb_strlen($normForCache, 'UTF-8') < 2) {
             return [
                 'items' => [],
                 'total' => 0,
@@ -45,8 +46,17 @@ final class CatalogSearchService
             ];
         }
 
-        $result = CatalogSearchBackendFactory::create()->searchProductIds($query, $page, $limit);
+        $cachedTotal = CatalogSearchTotalCacheService::get($normForCache);
+        $needTotalCount = $page <= 1 || $cachedTotal === null;
+
+        $result = CatalogSearchBackendFactory::create()->searchProductIds($query, $page, $limit, $needTotalCount);
         $total = (int)$result['total'];
+        if ($total < 0) {
+            $total = $cachedTotal !== null ? $cachedTotal : 0;
+        }
+        if ($needTotalCount && $total >= 0) {
+            CatalogSearchTotalCacheService::set($normForCache, $total);
+        }
         $pages = $limit > 0 ? (int)ceil($total / $limit) : 0;
         $productIds = $result['product_ids'];
         $items = CatalogService::loadGoodsDetailsByIdsForSearch($productIds);

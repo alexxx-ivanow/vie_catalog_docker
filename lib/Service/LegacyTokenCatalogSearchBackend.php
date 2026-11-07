@@ -42,7 +42,7 @@ final class LegacyTokenCatalogSearchBackend implements CatalogSearchBackendInter
         }
     }
 
-    public function searchProductIds(string $query, int $page, int $limit): array
+    public function searchProductIds(string $query, int $page, int $limit, bool $requireTotalCount = true): array
     {
         return CatalogSearchQueryService::searchProductIds($query, $page, $limit);
     }

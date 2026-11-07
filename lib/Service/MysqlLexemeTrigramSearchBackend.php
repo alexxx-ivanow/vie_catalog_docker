@@ -88,7 +88,7 @@ final class MysqlLexemeTrigramSearchBackend implements CatalogSearchBackendInter
     /**
      * @return array{product_ids: list<int>, total: int, scores: array<int, int>, search_mode: string}
      */
-    public function searchProductIds(string $query, int $page, int $limit): array
+    public function searchProductIds(string $query, int $page, int $limit, bool $requireTotalCount = true): array
     {
         CatalogSearchIndexSchema::ensureInfrastructure();
 
@@ -114,52 +114,206 @@ final class MysqlLexemeTrigramSearchBackend implements CatalogSearchBackendInter
             $tokenToLexemeIds[$token] = $lexIds;
         }
 
-        /** @var list<list<int>> $productIdSets */
-        $productIdSets = [];
-        foreach ($tokens as $token) {
-            $pids = $this->productIdsForLexemeIds($tokenToLexemeIds[$token]);
-            if ($pids === []) {
-                return self::emptyResult('strict');
-            }
-            $productIdSets[] = $pids;
-        }
+        $connection = Application::getConnection();
+        $helper = $connection->getSqlHelper();
+        $plTable = 'myapp_catalog_search_product_lexeme';
+        $docTable = SearchIndexDocumentTable::getTableName();
 
-        $productIds = $productIdSets[0];
-        for ($i = 1, $n = count($productIdSets); $i < $n; ++$i) {
-            $productIds = array_values(array_intersect($productIds, $productIdSets[$i]));
-            if ($productIds === []) {
-                return self::emptyResult('strict');
-            }
-        }
-        sort($productIds);
-
-        $scores = $this->scoreProducts($productIds, $tokenToLexemeIds);
         $minScore = $this->minimumScoreThreshold($tokens);
-        $filtered = [];
-        foreach ($productIds as $pid) {
-            $pid = (int)$pid;
-            if ((int)($scores[$pid] ?? 0) >= $minScore) {
-                $filtered[] = $pid;
+
+        $productInConditions = [];
+        $maxWeightSelects = [];
+        $mwAliases = [];
+        foreach (array_values($tokens) as $ti => $token) {
+            $lexIds = $tokenToLexemeIds[$token] ?? [];
+            $lexIds = array_values(array_filter(array_map('intval', $lexIds), static fn(int $id): bool => $id > 0));
+            if ($lexIds === []) {
+                return self::emptyResult('strict');
             }
+
+            $lexIn = self::columnInIntChunks('plx.LEXEME_ID', $lexIds);
+            $productInConditions[] = 'd.PRODUCT_ID IN (
+                SELECT DISTINCT plx.PRODUCT_ID
+                FROM ' . $plTable . ' plx
+                INNER JOIN ' . $docTable . ' dx ON dx.PRODUCT_ID = plx.PRODUCT_ID AND dx.ACTIVE = \'Y\'
+                WHERE ' . $lexIn . '
+            )';
+
+            $lexInMw = self::columnInIntChunks('plw.LEXEME_ID', $lexIds);
+            $alias = 'mw' . $ti;
+            $mwAliases[] = $alias;
+            $maxWeightSelects[] = '(
+                SELECT MAX(plw.WEIGHT) FROM ' . $plTable . ' plw
+                WHERE plw.PRODUCT_ID = d.PRODUCT_ID AND (' . $lexInMw . ')
+            ) AS ' . $alias;
         }
 
-        usort($filtered, static function (int $a, int $b) use ($scores): int {
-            $sa = (int)($scores[$a] ?? 0);
-            $sb = (int)($scores[$b] ?? 0);
-            return $sa !== $sb ? $sb <=> $sa : $a <=> $b;
-        });
+        $whereProductIntersection = implode("\n                AND ", $productInConditions);
 
-        $total = count($filtered);
+        // Два уровня: сначала mw* как столбцы (без total_score), иначе MySQL ругается на ссылку mw0 в том же SELECT.
+        $selectMw = implode(', ', $maxWeightSelects);
+        $baseSubquery = '
+            SELECT d.PRODUCT_ID, d.NAME_NORM, ' . $selectMw . '
+            FROM ' . $docTable . ' d
+            WHERE d.ACTIVE = \'Y\'
+            AND ' . $whereProductIntersection . '
+        ';
+
+        // MySQL: имя алиаса «inner» — зарезервированное слово; без бэктиков подзапрос теряет алиас (ошибка 1248).
+        $mwAlias = 'doc_mw';
+        $nameBonusInner = self::buildNamePrefixBonusExpressionSql($helper, $tokens, $mwAlias . '.NAME_NORM');
+        $sumMwInner = implode(
+            ' + ',
+            array_map(static fn(string $a): string => 'COALESCE(' . $mwAlias . '.' . $a . ',0)', $mwAliases)
+        );
+        $totalScoreExpr = '(' . $sumMwInner . ' + (' . $nameBonusInner . '))';
+
+        $whereFilters = [];
+        foreach ($mwAliases as $alias) {
+            $whereFilters[] = 'COALESCE(scored.' . $alias . ',0) > 0';
+        }
+        $whereFilters[] = 'scored.total_score >= ' . (int)$minScore;
+        $whereRankedSql = implode(' AND ', $whereFilters);
+
+        $scoredSubquery = '
+            SELECT ' . $mwAlias . '.PRODUCT_ID, ' . $mwAlias . '.NAME_NORM, ' . implode(
+                ', ',
+                array_map(static fn(string $a): string => $mwAlias . '.' . $a, $mwAliases)
+            ) . ', ' . $totalScoreExpr . ' AS total_score
+            FROM (' . $baseSubquery . ') ' . $mwAlias . '
+        ';
+
+        $rankedSubquery = '
+            SELECT scored.PRODUCT_ID, scored.NAME_NORM, ' . implode(
+                ', ',
+                array_map(static fn(string $a): string => 'scored.' . $a, $mwAliases)
+            ) . ', scored.total_score
+            FROM (' . $scoredSubquery . ') scored
+            WHERE ' . $whereRankedSql . '
+        ';
+
         $page = max(1, $page);
         $limit = max(1, $limit);
         $offset = ($page - 1) * $limit;
 
+        $total = 0;
+        if ($requireTotalCount) {
+            $countSql = 'SELECT COUNT(*) AS CNT FROM (' . $rankedSubquery . ') t_count';
+            $total = (int)$connection->queryScalar($countSql);
+        } else {
+            // Маркер: клиент подставляет total из кеша (первая страница того же запроса).
+            $total = -1;
+        }
+
+        if ($requireTotalCount && $total <= 0) {
+            return [
+                'product_ids' => [],
+                'total' => 0,
+                'scores' => [],
+                'search_mode' => 'strict',
+            ];
+        }
+
+        $outerMw = [];
+        foreach ($mwAliases as $alias) {
+            $outerMw[] = 't_ranked.' . $alias;
+        }
+
+        $listSql = '
+            SELECT t_ranked.PRODUCT_ID, t_ranked.NAME_NORM, ' . implode(', ', $outerMw) . '
+            FROM (' . $rankedSubquery . ') t_ranked
+            ORDER BY t_ranked.total_score DESC, t_ranked.PRODUCT_ID ASC
+            LIMIT ' . (int)$limit . ' OFFSET ' . (int)$offset . '
+        ';
+
+        $scores = [];
+        $productIds = [];
+        $res = $connection->query($listSql);
+        while ($row = $res->fetch()) {
+            $pid = (int)$row['PRODUCT_ID'];
+            $productIds[] = $pid;
+            $sum = 0;
+            foreach ($mwAliases as $alias) {
+                $sum += (int)($row[$alias] ?? 0);
+            }
+            $nameNorm = (string)($row['NAME_NORM'] ?? '');
+            $bonus = 0;
+            foreach ($tokens as $token) {
+                if ($token === '') {
+                    continue;
+                }
+                if (
+                    str_starts_with($nameNorm, $token)
+                    || preg_match('/\s' . preg_quote($token, '/') . '/u', ' ' . $nameNorm)
+                ) {
+                    $bonus = self::NAME_PREFIX_BONUS;
+                    break;
+                }
+            }
+            $scores[$pid] = $sum + $bonus;
+        }
+
         return [
-            'product_ids' => array_slice($filtered, $offset, $limit),
+            'product_ids' => $productIds,
             'total' => $total,
             'scores' => $scores,
             'search_mode' => 'strict',
         ];
+    }
+
+    private const IN_LIST_CHUNK_SIZE = 500;
+
+    /**
+     * @param list<int> $ids
+     */
+    private static function columnInIntChunks(string $columnSql, array $ids): string
+    {
+        $ids = array_values(array_unique(array_filter(
+            array_map('intval', $ids),
+            static fn(int $id): bool => $id > 0
+        )));
+        if ($ids === []) {
+            return '0';
+        }
+
+        $chunks = array_chunk($ids, self::IN_LIST_CHUNK_SIZE);
+        if (count($chunks) === 1) {
+            return $columnSql . ' IN (' . implode(',', $chunks[0]) . ')';
+        }
+
+        $parts = [];
+        foreach ($chunks as $chunk) {
+            $parts[] = $columnSql . ' IN (' . implode(',', $chunk) . ')';
+        }
+
+        return '(' . implode(' OR ', $parts) . ')';
+    }
+
+    /**
+     * Бонус за слово в NAME_NORM (как в scoreProducts): префикс имени или после пробела.
+     *
+     * @param list<string> $tokens
+     * @param string $nameColumn выражение столбца нормализованного имени (напр. doc_mw.NAME_NORM)
+     */
+    private static function buildNamePrefixBonusExpressionSql(
+        \Bitrix\Main\DB\SqlHelper $helper,
+        array $tokens,
+        string $nameColumn = 'd.NAME_NORM'
+    ): string {
+        $ors = [];
+        foreach ($tokens as $token) {
+            if ($token === '') {
+                continue;
+            }
+            $esc = $helper->forSql($token);
+            $ors[] = "(LOCATE('{$esc}', {$nameColumn}) = 1 OR LOCATE(CONCAT(' ', '{$esc}'), CONCAT(' ', {$nameColumn})) > 0)";
+        }
+
+        if ($ors === []) {
+            return '0';
+        }
+
+        return 'CASE WHEN ' . implode(' OR ', $ors) . ' THEN ' . self::NAME_PREFIX_BONUS . ' ELSE 0 END';
     }
 
     /**
@@ -340,96 +494,6 @@ final class MysqlLexemeTrigramSearchBackend implements CatalogSearchBackendInter
         }
 
         return $ids;
-    }
-
-    /**
-     * @param list<int> $lexemeIds
-     * @return list<int>
-     */
-    private function productIdsForLexemeIds(array $lexemeIds): array
-    {
-        $lexemeIds = array_values(array_filter(array_map('intval', $lexemeIds), static fn(int $id): bool => $id > 0));
-        if ($lexemeIds === []) {
-            return [];
-        }
-
-        $connection = Application::getConnection();
-        $plTable = 'myapp_catalog_search_product_lexeme';
-        $docTable = SearchIndexDocumentTable::getTableName();
-        $pids = [];
-        foreach (array_chunk($lexemeIds, 400) as $chunk) {
-            $inLex = implode(',', $chunk);
-            $res = $connection->query("
-                SELECT DISTINCT pl.PRODUCT_ID
-                FROM {$plTable} pl
-                INNER JOIN {$docTable} d ON d.PRODUCT_ID = pl.PRODUCT_ID AND d.ACTIVE = 'Y'
-                WHERE pl.LEXEME_ID IN ({$inLex})
-            ");
-            while ($row = $res->fetch()) {
-                $pids[] = (int)$row['PRODUCT_ID'];
-            }
-        }
-
-        return array_values(array_unique($pids));
-    }
-
-    /**
-     * @param list<int> $productIds
-     * @param array<string, list<int>> $tokenToLexemeIds
-     * @return array<int, int>
-     */
-    private function scoreProducts(array $productIds, array $tokenToLexemeIds): array
-    {
-        if ($productIds === []) {
-            return [];
-        }
-
-        $connection = Application::getConnection();
-        $plTable = 'myapp_catalog_search_product_lexeme';
-        $docTable = SearchIndexDocumentTable::getTableName();
-        $idsSql = implode(',', array_map('intval', $productIds));
-
-        $scores = array_fill_keys($productIds, 0);
-
-        foreach ($tokenToLexemeIds as $token => $lexIds) {
-            $lexIds = array_values(array_filter(array_map('intval', $lexIds), static fn(int $id): bool => $id > 0));
-            if ($lexIds === []) {
-                continue;
-            }
-            $inLex = implode(',', $lexIds);
-            $res = $connection->query("
-                SELECT pl.PRODUCT_ID, MAX(pl.WEIGHT) AS MW
-                FROM {$plTable} pl
-                WHERE pl.PRODUCT_ID IN ({$idsSql})
-                  AND pl.LEXEME_ID IN ({$inLex})
-                GROUP BY pl.PRODUCT_ID
-            ");
-            while ($row = $res->fetch()) {
-                $pid = (int)$row['PRODUCT_ID'];
-                $scores[$pid] = (int)($scores[$pid] ?? 0) + (int)$row['MW'];
-            }
-        }
-
-        $nameRes = $connection->query("
-            SELECT PRODUCT_ID, NAME_NORM
-            FROM {$docTable}
-            WHERE PRODUCT_ID IN ({$idsSql})
-        ");
-        while ($row = $nameRes->fetch()) {
-            $productId = (int)$row['PRODUCT_ID'];
-            $nameNorm = (string)($row['NAME_NORM'] ?? '');
-            foreach (array_keys($tokenToLexemeIds) as $token) {
-                if ($token === '') {
-                    continue;
-                }
-                if (str_starts_with($nameNorm, $token) || preg_match('/\s' . preg_quote($token, '/') . '/u', ' ' . $nameNorm)) {
-                    $scores[$productId] = (int)($scores[$productId] ?? 0) + self::NAME_PREFIX_BONUS;
-                    break;
-                }
-            }
-        }
-
-        return $scores;
     }
 
     /**
