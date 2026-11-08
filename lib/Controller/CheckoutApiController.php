@@ -40,6 +40,13 @@ class CheckoutApiController
     {
         $body = $this->jsonBody();
 
+        if (!$this->isValidSessid($body['sessid'] ?? null)) {
+            return $this->jsonResponse([
+                'success' => false,
+                'error' => 'Invalid sessid',
+            ], 400);
+        }
+
         try {
             $data = CheckoutService::calculate($body);
             $status = !empty($data['success']) ? 200 : 400;
