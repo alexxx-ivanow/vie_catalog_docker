@@ -257,6 +257,15 @@ export default {
             this.store.sort = sort;
             await this.loadGoods({ page: 1, resetPage: true });
         },
+        async resetFilter() {
+            const { min, max } = normalizePriceBounds(this.store.filterMeta);
+            this.store.filter = {
+                properties: {},
+                price_from: min,
+                price_to: max,
+            };
+            await this.loadGoods({ page: 1, resetPage: true });
+        },
         onPageData(data) {
             this.store.items = data;
             this.store.total = Number(data.total || 0);
@@ -382,6 +391,13 @@ export default {
                                 :aria-label="'Выбрано фильтров: ' + activeFilterCount"
                             >{{ activeFilterCount }}</span>
                         </label>
+                        <button
+                            v-if="store.filterEnabled && activeFilterCount > 0"
+                            type="button"
+                            class="catalog-filter-drawer__reset"
+                            :disabled="store.loading"
+                            @click="resetFilter"
+                        >Сбросить фильтр</button>
                         <span v-if="store.loading" class="catalog-skeleton-line catalog-skeleton-line--toolbar" aria-hidden="true"></span>
                         <span v-else class="catalog-page__toolbar-count">Найдено: {{ store.total }}</span>
                         <CatalogSortSelect
