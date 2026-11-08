@@ -6,12 +6,15 @@ use MyApp\Catalog\Search\CatalogSearchBackendFactory;
 
 final class CatalogSearchService
 {
+    /** Ограничение длины поискового запроса (и размера ключа кеша total). */
+    private const MAX_QUERY_LENGTH = 200;
+
     /**
      * @return array<string, mixed>
      */
     public static function search(string $query, int $page, int $limit, ?string $sort = null): array
     {
-        $query = trim($query);
+        $query = trim(mb_substr($query, 0, self::MAX_QUERY_LENGTH));
         $page = max(1, $page);
         $limit = CatalogService::normalizeGoodsLimit($limit);
 

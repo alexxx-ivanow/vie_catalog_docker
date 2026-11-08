@@ -4,6 +4,9 @@ namespace MyApp\Catalog\Service;
 
 final class CatalogSearchTextNormalizer
 {
+    /** Ограничение запроса: каждый токен порождает тяжёлые SQL-проходы в бэкендах. */
+    public const MAX_QUERY_TOKENS = 8;
+
     /** @var list<string> */
     private const STOP_WORDS = [
         'и', 'в', 'во', 'на', 'с', 'со', 'к', 'ко', 'у', 'о', 'об', 'от', 'до', 'по', 'за', 'из', 'для', 'не', 'но',
@@ -41,7 +44,8 @@ final class CatalogSearchTextNormalizer
             $filtered[] = $token;
         }
 
-        return array_values(array_unique($filtered));
+        // Лишние токены отбрасываем справа: первыми идут самые значимые слова запроса.
+        return array_slice(array_values(array_unique($filtered)), 0, self::MAX_QUERY_TOKENS);
     }
 
     /**
