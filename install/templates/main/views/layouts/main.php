@@ -23,6 +23,10 @@ $vueModuleUrl = (string)($vueModuleUrl ?? '/local/modules/myapp.catalog/js/vendo
 $useBitrixVue = !empty($useBitrixVue);
 $bitrixAssetJs = (string)($bitrixAssetJs ?? '');
 $showBreadcrumbs = ($showBreadcrumbs ?? true) !== false;
+// JSON_HEX_TAG экранирует < и > — пользовательские строки (например, ?q=)
+// не могут закрыть тег <script> и выполнить XSS.
+$jsonPageFlags = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+    | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT;
 ?>
 <!DOCTYPE html>
 <html lang="ru">
@@ -45,7 +49,7 @@ $showBreadcrumbs = ($showBreadcrumbs ?? true) !== false;
     <script type="importmap">
     {
         "imports": {
-            "vue": <?= json_encode($vueModuleUrl, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>
+            "vue": <?= json_encode($vueModuleUrl, $jsonPageFlags) ?>
         }
     }
     </script>
@@ -100,29 +104,29 @@ $showBreadcrumbs = ($showBreadcrumbs ?? true) !== false;
     ?>
     window.__BX__ = {
         sessid:  '<?= bitrix_sessid() ?>',
-        apiBase: <?= json_encode(rtrim($apiBase, '/') . '/', JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>,
+        apiBase: <?= json_encode(rtrim($apiBase, '/') . '/', $jsonPageFlags) ?>,
         userId:  <?= $bxUserId ?>,
-        userName: <?= json_encode($bxUserName, JSON_UNESCAPED_UNICODE) ?>,
+        userName: <?= json_encode($bxUserName, $jsonPageFlags) ?>,
         isAuthorized: <?= $bxUserId > 0 ? 'true' : 'false' ?>,
     };
 
     window.__PAGE_DATA__ = {
         page: {
-            type: <?= json_encode($pageType, JSON_UNESCAPED_UNICODE) ?>,
+            type: <?= json_encode($pageType, $jsonPageFlags) ?>,
             section_id: <?= $sectionId ?>,
-            content_title: <?= json_encode($contentPageTitle, JSON_UNESCAPED_UNICODE) ?>,
+            content_title: <?= json_encode($contentPageTitle, $jsonPageFlags) ?>,
         },
-        pageContent: <?= json_encode($data_page, JSON_UNESCAPED_UNICODE) ?>,
-        home: <?= json_encode($data_home, JSON_UNESCAPED_UNICODE) ?>,
+        pageContent: <?= json_encode($data_page, $jsonPageFlags) ?>,
+        home: <?= json_encode($data_home, $jsonPageFlags) ?>,
         catalog: {
-            items: <?= json_encode($data_sections, JSON_UNESCAPED_UNICODE) ?>,
+            items: <?= json_encode($data_sections, $jsonPageFlags) ?>,
             total: <?= count($data_sections) ?>,
         },
         section: {
             id: <?= $sectionId ?>,
-            data: <?= json_encode($data_section, JSON_UNESCAPED_UNICODE) ?>,
+            data: <?= json_encode($data_section, $jsonPageFlags) ?>,
             total: <?= count($data_section['items'] ?? []) ?>,
-            filter: <?= json_encode($sectionFilter, JSON_UNESCAPED_UNICODE) ?>,
+            filter: <?= json_encode($sectionFilter, $jsonPageFlags) ?>,
             pagination: {
                 page: <?= (int)($sectionPagination['page'] ?? 1) ?>,
                 pages: <?= (int)($sectionPagination['pages'] ?? 1) ?>,
@@ -132,14 +136,14 @@ $showBreadcrumbs = ($showBreadcrumbs ?? true) !== false;
         },
         product: {
             section_id: <?= $sectionId ?>,
-            data: <?= json_encode($data_product, JSON_UNESCAPED_UNICODE) ?>,
+            data: <?= json_encode($data_product, $jsonPageFlags) ?>,
         },
         order: {
-            data: <?= json_encode($data_order, JSON_UNESCAPED_UNICODE) ?>,
+            data: <?= json_encode($data_order, $jsonPageFlags) ?>,
         },
-        authConfirm: <?= json_encode($data_auth_confirm, JSON_UNESCAPED_UNICODE) ?>,
-        authChangePassword: <?= json_encode($data_auth_change_password, JSON_UNESCAPED_UNICODE) ?>,
-        search: <?= json_encode($data_search, JSON_UNESCAPED_UNICODE) ?>,
+        authConfirm: <?= json_encode($data_auth_confirm, $jsonPageFlags) ?>,
+        authChangePassword: <?= json_encode($data_auth_change_password, $jsonPageFlags) ?>,
+        search: <?= json_encode($data_search, $jsonPageFlags) ?>,
     };
 </script>
 
