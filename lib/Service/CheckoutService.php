@@ -2,6 +2,7 @@
 
 namespace MyApp\Catalog\Service;
 
+use Bitrix\Main\Config\Option;
 use Bitrix\Main\Context;
 use Bitrix\Main\Loader;
 use Bitrix\Sale\Basket;
@@ -31,14 +32,15 @@ class CheckoutService
 
         $personTypes = self::getPersonTypes();
         $defaultPersonTypeId = (int)($personTypes[0]['id'] ?? 0);
+        $defaultLocation = self::getDefaultStoreLocation();
 
         return [
             'success' => true,
             'personTypes' => $personTypes,
             'selection' => [
                 'personTypeId' => $defaultPersonTypeId,
-                'locationCode' => '',
-                'locationLabel' => '',
+                'locationCode' => (string)($defaultLocation['code'] ?? ''),
+                'locationLabel' => (string)($defaultLocation['displayName'] ?? ''),
                 'deliveryId' => 0,
                 'paySystemId' => 0,
                 'properties' => [],
@@ -1467,6 +1469,103 @@ class CheckoutService
         }
 
         return $items;
+    }
+
+    /**
+     * Местоположение по умолчанию из настроек модуля Интернет-магазин
+     * («Местоположение магазина», опция sale/location; значение — CODE локации).
+     *
+     * @return array{code: string, displayName: string}|null
+     */
+    private static function getDefaultStoreLocation(): ?array
+    {
+        $siteId = Context::getCurrent()->getSite();
+        $code = trim((string)Option::get('sale', 'location', '', $siteId));
+        if ($code === '') {
+            return null;
+        }
+
+        $location = self::findLocationByCodeViaLocationTable($code);
+        if ($location !== null) {
+            return $location;
+        }
+
+        return self::findLocationByCodeViaLegacyApi($code);
+    }
+
+    /**
+     * @return array{code: string, displayName: string}|null
+     */
+    private static function findLocationByCodeViaLocationTable(string $code): ?array
+    {
+        if (!class_exists('\Bitrix\Sale\Location\LocationTable')) {
+            return null;
+        }
+
+        $langId = defined('LANGUAGE_ID') ? (string)LANGUAGE_ID : 'ru';
+
+        try {
+            $row = \Bitrix\Sale\Location\LocationTable::getList([
+                'select' => [
+                    'ID',
+                    'CODE',
+                    'LOC_NAME' => 'NAME.NAME',
+                ],
+                'filter' => [
+                    '=CODE' => $code,
+                    '=NAME.LANGUAGE_ID' => $langId,
+                ],
+                'limit' => 1,
+            ])->fetch();
+        } catch (\Throwable $e) {
+            return null;
+        }
+
+        $displayName = trim((string)($row['LOC_NAME'] ?? ''));
+        if (!$row || $displayName === '') {
+            return null;
+        }
+
+        return [
+            'code' => (string)($row['CODE'] ?? $code),
+            'displayName' => $displayName,
+        ];
+    }
+
+    /**
+     * @return array{code: string, displayName: string}|null
+     */
+    private static function findLocationByCodeViaLegacyApi(string $code): ?array
+    {
+        if (!class_exists('\CSaleLocation')) {
+            return null;
+        }
+
+        $row = \CSaleLocation::GetList(
+            [],
+            ['CODE' => $code],
+            false,
+            ['nTopCount' => 1],
+            ['ID', 'CODE', 'CITY_NAME', 'REGION_NAME', 'COUNTRY_NAME']
+        )->Fetch();
+        if (!$row) {
+            return null;
+        }
+
+        $parts = array_filter([
+            $row['CITY_NAME'] ?? '',
+            $row['REGION_NAME'] ?? '',
+            $row['COUNTRY_NAME'] ?? '',
+        ]);
+        $displayName = implode(', ', $parts);
+        if ($displayName === '') {
+            return null;
+        }
+
+        return [
+            'code' => (string)($row['CODE'] ?? $code),
+            'displayName' => $displayName,
+        ];
     }
 
     private static function resolveBasketCurrency(Basket $basket): string
