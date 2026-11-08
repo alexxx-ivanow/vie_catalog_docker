@@ -86,8 +86,9 @@ final class HomeMainContentService
                 ? (int)($props[$elId][substr($imageKey, 9)] ?? 0)
                 : (int)($element[$imageKey] ?? 0);
 
+            $resized = ImageResizeService::resize($fileId, ...ImageResizeService::SIZE_HOME_SLIDER);
             $slides[] = [
-                'image' => IblockContentReader::fileSrc($fileId),
+                'image' => $resized['src'] !== '' ? $resized['src'] : IblockContentReader::fileSrc($fileId),
                 'link' => $view['link'] ?? '',
                 'caption' => $view['caption'] ?? '',
                 'alt' => (string)($element['NAME'] ?? ''),
@@ -129,10 +130,11 @@ final class HomeMainContentService
                 $text = (string)$element['PREVIEW_TEXT'];
             }
 
+            $resizedIcon = ImageResizeService::resize($iconId, ...ImageResizeService::SIZE_HOME_ICON);
             $items[] = [
                 'title' => $view['title'] ?? (string)($element['NAME'] ?? ''),
                 'text' => $text,
-                'icon' => IblockContentReader::fileSrc($iconId),
+                'icon' => $resizedIcon['src'] !== '' ? $resizedIcon['src'] : IblockContentReader::fileSrc($iconId),
             ];
         }
 
@@ -167,10 +169,14 @@ final class HomeMainContentService
                 : (int)($element[$imageKey] ?? 0);
         }
 
+        $resizedImage = ImageResizeService::resize($fileId, ...ImageResizeService::SIZE_HOME_ABOUT);
+
         return [
             'title' => $view['title'] ?? (string)($element['NAME'] ?? ''),
             'body' => $view['body'] ?? (string)($element['DETAIL_TEXT'] ?? ''),
-            'image' => $fileId > 0 ? IblockContentReader::fileSrc($fileId) : '',
+            'image' => $fileId > 0
+                ? ($resizedImage['src'] !== '' ? $resizedImage['src'] : IblockContentReader::fileSrc($fileId))
+                : '',
         ];
     }
 

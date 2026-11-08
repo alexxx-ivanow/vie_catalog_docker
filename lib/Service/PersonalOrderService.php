@@ -153,7 +153,7 @@ final class PersonalOrderService
             $price = (float)$basketItem->getPrice();
             $sum = round($price * $quantity, 2);
             $name = $product['NAME'] ?? (string)$basketItem->getField('NAME');
-            $preview = trim((string)($product['DETAIL_PICTURE'] ?? ''));
+            $preview = trim((string)($product['DETAIL_PICTURE_THUMB'] ?? $product['DETAIL_PICTURE'] ?? ''));
             if ($preview === '') {
                 $preview = Assets::NO_PHOTO_IMAGE;
             }

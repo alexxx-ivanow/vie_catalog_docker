@@ -258,7 +258,11 @@ final class CatalogSkuService
             }
 
             $pictureId = (int)($fields['DETAIL_PICTURE'] ?: $fields['PREVIEW_PICTURE']);
-            $picture = $pictureId > 0 ? CatalogService::resolveFilePathPublic($pictureId) : '';
+            $picture = '';
+            if ($pictureId > 0) {
+                $resized = ImageResizeService::resize($pictureId, ...ImageResizeService::SIZE_DETAIL);
+                $picture = $resized['src'] !== '' ? $resized['src'] : CatalogService::resolveFilePathPublic($pictureId);
+            }
 
             $rows[] = [
                 'id' => $offerId,

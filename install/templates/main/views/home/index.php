@@ -113,6 +113,24 @@ $data_sections = is_array($data_sections ?? null) ? $data_sections : [];
         </section>
     <?php endif; ?>
 
+    <?php if (!empty($show['advantages']) && $advantages !== []): ?>
+        <section class="home-advantages home-section" aria-label="Преимущества">
+            <h2 class="home-section__title home-advantages__title">Почему мы</h2>
+            <ul class="home-advantages__grid">
+                <?php foreach ($advantages as $item): ?>
+                    <li class="home-advantage-card">
+                        <?php if (($item['icon'] ?? '') !== ''): ?>
+                            <span class="home-advantage-card__icon" aria-hidden="true">
+                                <img src="<?= htmlspecialcharsbx((string)$item['icon']) ?>" alt="" width="48" height="48" loading="lazy">
+                            </span>
+                        <?php endif; ?>
+                        <p class="home-advantage-card__text"><?= htmlspecialcharsbx((string)($item['text'] ?? $item['title'] ?? '')) ?></p>
+                    </li>
+                <?php endforeach; ?>
+            </ul>
+        </section>
+    <?php endif; ?>
+
     <?php if (!empty($show['catalog']) && $data_sections !== []): ?>
         <section class="home-catalog home-section">
             <h2 class="home-section__title">Каталог</h2>
@@ -152,24 +170,6 @@ $data_sections = is_array($data_sections ?? null) ? $data_sections : [];
                     <img class="home-about__image" src="<?= htmlspecialcharsbx((string)$about['image']) ?>" alt="" width="1120" height="800" loading="lazy" decoding="async">
                 </div>
             <?php endif; ?>
-        </section>
-    <?php endif; ?>
-
-    <?php if (!empty($show['advantages']) && $advantages !== []): ?>
-        <section class="home-advantages home-section" aria-label="Преимущества">
-            <h2 class="home-section__title home-advantages__title">Почему мы</h2>
-            <ul class="home-advantages__grid">
-                <?php foreach ($advantages as $item): ?>
-                    <li class="home-advantage-card">
-                        <?php if (($item['icon'] ?? '') !== ''): ?>
-                            <span class="home-advantage-card__icon" aria-hidden="true">
-                                <img src="<?= htmlspecialcharsbx((string)$item['icon']) ?>" alt="" width="48" height="48" loading="lazy">
-                            </span>
-                        <?php endif; ?>
-                        <p class="home-advantage-card__text"><?= htmlspecialcharsbx((string)($item['text'] ?? $item['title'] ?? '')) ?></p>
-                    </li>
-                <?php endforeach; ?>
-            </ul>
         </section>
     <?php endif; ?>
 

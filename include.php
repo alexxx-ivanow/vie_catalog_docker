@@ -73,6 +73,7 @@ Loader::registerAutoLoadClasses('myapp.catalog', [
     'MyApp\\Catalog\\Service\\CatalogSearchSuggestService' => 'lib/Service/CatalogSearchSuggestService.php',
     'MyApp\\Catalog\\Service\\CatalogSearchService' => 'lib/Service/CatalogSearchService.php',
     'MyApp\\Catalog\\Service\\CatalogSearchTotalCacheService' => 'lib/Service/CatalogSearchTotalCacheService.php',
+    'MyApp\\Catalog\\Service\\ImageResizeService' => 'lib/Service/ImageResizeService.php',
 ]);
 
 \MyApp\Catalog\Event\CatalogCacheHandler::ensurePersistentHandlers();

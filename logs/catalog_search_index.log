@@ -100117,3 +100117,4 @@
 2026-11-05 15:03:02 Product 107703: Call to undefined method MyApp\Catalog\Model\SearchIndexTokenTable::deleteList()
 2026-11-05 15:03:02 Product 107701: Call to undefined method MyApp\Catalog\Model\SearchIndexTokenTable::deleteList()
 2026-11-05 15:03:02 Product 107695: Call to undefined method MyApp\Catalog\Model\SearchIndexTokenTable::deleteList()
+2026-11-08 19:44:55 Product 11023: Mysql query error: (1062) Duplicate entry '11023' for key 'myapp_catalog_search_document.PRIMARY'

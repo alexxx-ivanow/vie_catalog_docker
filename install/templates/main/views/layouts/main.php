@@ -44,15 +44,6 @@ $jsonPageFlags = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
     <?php if ($useBitrixVue && $bitrixAssetJs !== ''): ?>
         <?= $bitrixAssetJs ?>
     <?php endif; ?>
-
-    <!-- Import Map: позволяет писать import 'vue' без npm -->
-    <script type="importmap">
-    {
-        "imports": {
-            "vue": <?= json_encode($vueModuleUrl, $jsonPageFlags) ?>
-        }
-    }
-    </script>
 </head>
 <body class="site-body">
 
@@ -91,6 +82,15 @@ $jsonPageFlags = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
         <p class="site-footer__copy">© <?= date('Y') ?> Интернет-магазин. Все права защищены.</p>
     </div>
 </footer>
+
+<!-- Import Map: позволяет писать import 'vue' без npm -->
+<script type="importmap">
+    {
+        "imports": {
+            "vue": <?= json_encode($vueModuleUrl, $jsonPageFlags) ?>
+    }
+}
+</script>
 
 <!-- Передаём данные из PHP в JS -->
 <script>

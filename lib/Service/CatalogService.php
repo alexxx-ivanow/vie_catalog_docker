@@ -46,13 +46,22 @@ class CatalogService
 
         $res      = $db->query($sql);
         $sections = [];
-
+        $pictureIds = [];
         while ($row = $res->fetch()) {
-            $row['PICTURE'] = (int)$row['PICTURE']
-                ? self::getFilePath((int)$row['PICTURE'])
-                : Assets::NO_PHOTO_IMAGE;
+            $pictureId = (int)$row['PICTURE'];
+            if ($pictureId > 0) {
+                $pictureIds[$pictureId] = $pictureId;
+            }
             $sections[] = $row;
         }
+
+        $pictureMap = ImageResizeService::resizeMany(array_values($pictureIds), ...ImageResizeService::SIZE_SECTION);
+        foreach ($sections as &$row) {
+            $pictureId = (int)$row['PICTURE'];
+            $src = $pictureId > 0 ? (string)($pictureMap[$pictureId]['src'] ?? '') : '';
+            $row['PICTURE'] = $src !== '' ? $src : Assets::NO_PHOTO_IMAGE;
+        }
+        unset($row);
 
         return $sections;
     }
@@ -151,6 +160,7 @@ class CatalogService
             $skuSuffix = '_sku' . CatalogSkuService::getOffersIblockId() . '_v3';
         }
         $cacheKey = 'product_' . $id
+            . '_img1'
             . '_g' . self::catalogPriceGroupId()
             . '_c' . self::catalogDisplayCurrency()
             . '_p' . md5(implode(',', self::productCardPropertyCodesForFetch()))
@@ -188,11 +198,16 @@ class CatalogService
             return null;
         }
 
-        if ($result['DETAIL_PICTURE']) {
-            $result['DETAIL_PICTURE'] = self::getFilePath((int)$result['DETAIL_PICTURE']);
-        } else {
-            $result['DETAIL_PICTURE'] = Assets::NO_PHOTO_IMAGE;
-        }
+            $detailPictureId = (int)($result['DETAIL_PICTURE'] ?? 0);
+            if ($detailPictureId > 0) {
+                $detail = ImageResizeService::resize($detailPictureId, ...ImageResizeService::SIZE_DETAIL);
+                $result['DETAIL_PICTURE'] = $detail['src'] !== '' ? $detail['src'] : Assets::NO_PHOTO_IMAGE;
+                $thumb = ImageResizeService::resize($detailPictureId, ...ImageResizeService::SIZE_THUMB_CART);
+                $result['DETAIL_PICTURE_THUMB'] = $thumb['src'] !== '' ? $thumb['src'] : Assets::NO_PHOTO_IMAGE;
+            } else {
+                $result['DETAIL_PICTURE'] = Assets::NO_PHOTO_IMAGE;
+                $result['DETAIL_PICTURE_THUMB'] = Assets::NO_PHOTO_IMAGE;
+            }
 
         $properties = self::fetchProductCardProperties($id);
         $articlePropertyCode = Assets::catalogArticlePropertyCode();
@@ -659,7 +674,7 @@ class CatalogService
         }
 
         $stageStartedAt = microtime(true);
-        $pictureMap = self::getFilePaths(array_values($pictureIds));
+        $pictureMap = ImageResizeService::resizeMany(array_values($pictureIds), ...ImageResizeService::SIZE_LIST);
         if ($measurePerf) {
             $filesMs = (microtime(true) - $stageStartedAt) * 1000;
             $perf['stages_ms']['files'] = round($filesMs, 2);
@@ -679,9 +694,8 @@ class CatalogService
             $id = (int)$item['ID'];
             $detailPictureId = (int)$item['DETAIL_PICTURE'];
 
-            $item['DETAIL_PICTURE'] = $detailPictureId > 0
-                ? ($pictureMap[$detailPictureId] ?? Assets::NO_PHOTO_IMAGE)
-                : Assets::NO_PHOTO_IMAGE;
+            $src = $detailPictureId > 0 ? (string)($pictureMap[$detailPictureId]['src'] ?? '') : '';
+            $item['DETAIL_PICTURE'] = $src !== '' ? $src : Assets::NO_PHOTO_IMAGE;
         }
         unset($item);
         self::applySkuPricingToListItems($items, $prices);
@@ -2679,12 +2693,11 @@ class CatalogService
             $items[] = $row;
         }
 
-        $pictureMap = self::getFilePaths(array_values($pictureIds));
+        $pictureMap = ImageResizeService::resizeMany(array_values($pictureIds), ...ImageResizeService::SIZE_LIST);
         foreach ($items as &$item) {
             $detailPictureId = (int)$item['DETAIL_PICTURE'];
-            $item['DETAIL_PICTURE'] = $detailPictureId > 0
-                ? ($pictureMap[$detailPictureId] ?? Assets::NO_PHOTO_IMAGE)
-                : Assets::NO_PHOTO_IMAGE;
+            $src = $detailPictureId > 0 ? (string)($pictureMap[$detailPictureId]['src'] ?? '') : '';
+            $item['DETAIL_PICTURE'] = $src !== '' ? $src : Assets::NO_PHOTO_IMAGE;
         }
         unset($item);
 

@@ -2023,10 +2023,14 @@ img {
 }
 
 .home-hero__caption {
-    margin: 12px 0 0;
+    position: absolute;
+    left: 0;
+    right: 0;
+    display: block;
     text-align: center;
-    font-size: 18px;
-    color: var(--color-text, #333);
+    top: 36%;
+    color: #fff;
+    font-size: 50px;
 }
 
 .home-hero__link {
@@ -2510,3 +2514,9 @@ img {
     color: var(--color-text-muted);
 }
 
+@media (max-width: 767px) {
+    .home-hero__caption {
+        font-size: 27px;
+        top: 22%;
+    }
+}

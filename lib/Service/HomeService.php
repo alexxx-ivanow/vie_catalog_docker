@@ -88,12 +88,20 @@ final class HomeService
      */
     private static function mapSectionRow(array $row): array
     {
+        $pictureId = (int)($row['PICTURE'] ?? 0);
+        if ($pictureId > 0) {
+            $resized = ImageResizeService::resize($pictureId, ...ImageResizeService::SIZE_SECTION);
+            $picture = $resized['src'] !== '' ? $resized['src'] : IblockContentReader::fileSrc($pictureId);
+        } else {
+            $picture = IblockContentReader::fileSrc(0);
+        }
+
         return [
             'ID' => (int)$row['ID'],
             'NAME' => (string)$row['NAME'],
             'CODE' => (string)($row['CODE'] ?? ''),
             'DESCRIPTION' => (string)($row['DESCRIPTION'] ?? ''),
-            'PICTURE' => IblockContentReader::fileSrc((int)($row['PICTURE'] ?? 0)),
+            'PICTURE' => $picture,
             'URL' => '/catalog/section/' . (int)$row['ID'],
         ];
     }
