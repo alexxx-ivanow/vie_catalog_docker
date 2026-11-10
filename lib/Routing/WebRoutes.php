@@ -85,6 +85,10 @@ class WebRoutes
             return (new ApiController())->breadcrumbs();
         });
 
+        $routes->get($api . '/catalog/cart/summary', static function () {
+            return (new ApiController())->cartSummary();
+        });
+
         $routes->get($api . '/catalog/cart', static function () {
             return (new ApiController())->cart();
         });

@@ -134,8 +134,21 @@ class ApiController
 
     public function cart(): Json
     {
+        $this->releaseSessionLock();
+
         try {
             return $this->jsonResponse(CartService::getCart());
+        } catch (\Throwable $e) {
+            return $this->errorResponse($e);
+        }
+    }
+
+    public function cartSummary(): Json
+    {
+        $this->releaseSessionLock();
+
+        try {
+            return $this->jsonResponse(CartService::getCartSummary());
         } catch (\Throwable $e) {
             return $this->errorResponse($e);
         }

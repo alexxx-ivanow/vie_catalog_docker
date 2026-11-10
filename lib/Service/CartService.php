@@ -177,6 +177,28 @@ class CartService
         ];
     }
 
+    /**
+     * Лёгкая выборка для бейджа в шапке: без синхронизации каталога, скидок и списка позиций.
+     *
+     * @return array{success: bool, basketCount: int, totals: array{basketCount: float}}
+     */
+    public static function getCartSummary(): array
+    {
+        Loader::includeModule('sale');
+
+        $basket = self::loadBasket();
+        $totals = self::calculateTotals($basket);
+        $basketCount = (float)($totals['basketCount'] ?? 0);
+
+        return [
+            'success' => true,
+            'basketCount' => (int)floor($basketCount),
+            'totals' => [
+                'basketCount' => $basketCount,
+            ],
+        ];
+    }
+
     public static function updateQuantity(int $basketItemId, int $quantity): array
     {
         Loader::includeModule('sale');

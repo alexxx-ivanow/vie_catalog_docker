@@ -34,7 +34,7 @@ export function syncCartCountFromResponse(data) {
 
 export async function fetchCartCount() {
     try {
-        const { data } = await apiGet(catalogApiUrl('catalog/cart'));
+        const { data } = await apiGet(catalogApiUrl('catalog/cart/summary'));
         return setCartCount(extractBasketCount(data));
     } catch {
         return setCartCount(0);
