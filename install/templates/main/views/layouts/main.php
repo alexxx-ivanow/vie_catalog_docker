@@ -117,11 +117,14 @@ $jsonPageFlags = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
             content_title: <?= json_encode($contentPageTitle, $jsonPageFlags) ?>,
         },
         pageContent: <?= json_encode($data_page, $jsonPageFlags) ?>,
-        home: <?= json_encode($data_home, $jsonPageFlags) ?>,
-        catalog: {
-            items: <?= json_encode($data_sections, $jsonPageFlags) ?>,
-            total: <?= count($data_sections) ?>,
-        },
+        catalog: <?php if ($pageType === 'home'): ?>
+            { items: [], total: 0 },
+        <?php else: ?>
+            {
+                items: <?= json_encode($data_sections, $jsonPageFlags) ?>,
+                total: <?= count($data_sections) ?>,
+            },
+        <?php endif; ?>
         section: {
             id: <?= $sectionId ?>,
             data: <?= json_encode($data_section, $jsonPageFlags) ?>,

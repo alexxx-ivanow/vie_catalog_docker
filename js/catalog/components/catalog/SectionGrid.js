@@ -2,7 +2,7 @@ import SectionCard from './SectionCard.js';
 import { catalogApiUrl, getReadHeaders } from '../../api-client.js';
 
 const SKELETON_COUNT = 8;
-const HYDRATE_PAGE_TYPES = new Set(['catalog', 'home']);
+const HYDRATE_PAGE_TYPES = new Set(['catalog']);
 
 export function readInitialSectionsFromPage() {
     const pageType = String(window.__PAGE_DATA__?.page?.type || '');

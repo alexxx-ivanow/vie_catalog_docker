@@ -30,7 +30,6 @@ class HomeController extends BasePageController
             'data_section' => [],
             'data_product' => [],
             'data_home' => $home,
-            'jsEntry' => count($sections) > 0 ? 'app-home.js' : '',
         ];
 
         return $this->renderPage($initialState);
