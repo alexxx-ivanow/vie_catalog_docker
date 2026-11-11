@@ -64,7 +64,17 @@ $jsonPageFlags = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
 <main class="site-main">
     <div class="container">
         <?php if ($showBreadcrumbs): ?>
-            <div id="app-breadcrumbs"></div>
+            <div id="app-breadcrumbs">
+                <div class="breadcrumbs-wrap" aria-busy="true">
+                    <div class="breadcrumbs-placeholder" aria-hidden="true">
+                        <span class="breadcrumbs-placeholder__item"></span>
+                        <span class="breadcrumbs-placeholder__sep">/</span>
+                        <span class="breadcrumbs-placeholder__item"></span>
+                        <span class="breadcrumbs-placeholder__sep">/</span>
+                        <span class="breadcrumbs-placeholder__item breadcrumbs-placeholder__item--short"></span>
+                    </div>
+                </div>
+            </div>
         <?php endif; ?>
         <?php if (!empty($contentView)): ?>
             <?php
@@ -116,7 +126,6 @@ $jsonPageFlags = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
             section_id: <?= $sectionId ?>,
             content_title: <?= json_encode($contentPageTitle, $jsonPageFlags) ?>,
         },
-        pageContent: <?= json_encode($data_page, $jsonPageFlags) ?>,
         catalog: <?php if ($pageType === 'home'): ?>
             { items: [], total: 0 },
         <?php else: ?>
