@@ -30,11 +30,22 @@ final class Assets
 
     public const OPT_USE_PRODUCT_FILTER_INDEX = 'use_product_filter_index';
 
+    /** legacy | denormalized | bitmap */
+    public const OPT_CATALOG_FILTER_ENGINE = 'catalog_filter_engine';
+
     public const OPT_PRODUCT_FILTER_INDEX_BATCH_SIZE = 'product_filter_index_batch_size';
 
     public const OPT_PRODUCT_FILTER_INDEX_ADMIN_STEP_BATCH = 'product_filter_index_admin_step_batch';
 
     public const OPT_PRODUCT_FILTER_INDEX_PARTIAL_SECTION_ID = 'product_filter_index_partial_section_id';
+
+    public const OPT_BITMAP_INDEX_BATCH_SIZE = 'bitmap_index_batch_size';
+
+    public const OPT_BITMAP_INDEX_ADMIN_STEP_BATCH = 'bitmap_index_admin_step_batch';
+
+    public const DEFAULT_BITMAP_INDEX_ADMIN_STEP_BATCH = 20;
+
+    public const MAX_BITMAP_INDEX_ADMIN_STEP_BATCH = 120;
 
     public const OPT_SKU_PROPERTY_CODES = 'sku_property_codes';
 
@@ -172,6 +183,20 @@ final class Assets
         }
 
         return min(self::MAX_PRODUCT_FILTER_INDEX_ADMIN_STEP_BATCH, max(1, $size));
+    }
+
+    public static function bitmapIndexAdminStepBatch(): int
+    {
+        $size = (int)Option::get(
+            self::MODULE_ID,
+            self::OPT_BITMAP_INDEX_ADMIN_STEP_BATCH,
+            (string)self::DEFAULT_BITMAP_INDEX_ADMIN_STEP_BATCH
+        );
+        if ($size <= 0) {
+            $size = self::DEFAULT_BITMAP_INDEX_ADMIN_STEP_BATCH;
+        }
+
+        return min(self::MAX_BITMAP_INDEX_ADMIN_STEP_BATCH, max(1, $size));
     }
 
     public static function searchIndexAdminStepBatch(): int

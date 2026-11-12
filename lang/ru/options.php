@@ -6,6 +6,8 @@ $MESS['MYAPP_CATALOG_OPT_TAB_SNAPSHOTS'] = 'Снапшоты фильтров';
 $MESS['MYAPP_CATALOG_OPT_TAB_SNAPSHOTS_TITLE'] = 'Фоновое построение JSON-снапшотов фильтра каталога';
 $MESS['MYAPP_CATALOG_OPT_TAB_INDEX'] = 'Индекс фильтрации';
 $MESS['MYAPP_CATALOG_OPT_TAB_INDEX_TITLE'] = 'Денормализованный индекс товаров для быстрой фильтрации catalog/goods';
+$MESS['MYAPP_CATALOG_OPT_TAB_BITMAP'] = 'Bitmap Index';
+$MESS['MYAPP_CATALOG_OPT_TAB_BITMAP_TITLE'] = 'Побитовый индекс фильтрации и переключение движка catalog/goods';
 $MESS['MYAPP_CATALOG_OPT_TAB_SEARCH'] = 'Поиск';
 $MESS['MYAPP_CATALOG_OPT_TAB_SEARCH_TITLE'] = 'Поисковый индекс каталога и переиндексация';
 $MESS['MYAPP_CATALOG_OPT_USE_BITRIX_VUE'] = 'Подключать Vue 3 из ядра Bitrix (ui.vue3)';
@@ -66,4 +68,5 @@ $MESS['MYAPP_CATALOG_OPT_ORDER_SECTION'] = 'Оформление заказа';
 
 require __DIR__ . '/admin/filter_snapshots.php';
 require __DIR__ . '/admin/filter_index.php';
+require __DIR__ . '/admin/bitmap_index.php';
 require __DIR__ . '/admin/search_index.php';

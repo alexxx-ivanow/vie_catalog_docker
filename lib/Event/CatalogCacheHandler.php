@@ -8,6 +8,7 @@ use Bitrix\Main\Loader;
 use Bitrix\Iblock\ElementTable;
 use Bitrix\Iblock\SectionTable;
 use MyApp\Catalog\Config\Assets;
+use MyApp\Catalog\Service\BitmapIndexService;
 use MyApp\Catalog\Service\ProductFilterIndexService;
 use MyApp\Catalog\Service\CatalogSearchIndexService;
 use MyApp\Catalog\Service\CatalogService;
@@ -244,7 +245,12 @@ final class CatalogCacheHandler
         unset(self::$elementSectionsBeforeUpdate[$elementId]);
 
         CatalogService::invalidateByElement($elementId, $oldSectionIds, true);
-        ProductFilterIndexService::removeProduct($elementId);
+        if (ProductFilterIndexService::shouldMaintain()) {
+            ProductFilterIndexService::removeProduct($elementId);
+        }
+        if (BitmapIndexService::shouldMaintain()) {
+            BitmapIndexService::removeProduct($elementId);
+        }
         CatalogSearchIndexService::removeProduct($elementId);
     }
 

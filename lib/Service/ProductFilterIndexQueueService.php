@@ -12,7 +12,7 @@ final class ProductFilterIndexQueueService
     public static function enqueue(int $productId, int $jobId = 0): void
     {
         $productId = (int)$productId;
-        if ($productId <= 0) {
+        if ($productId <= 0 || !ProductFilterIndexService::shouldMaintain()) {
             return;
         }
 

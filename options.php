@@ -8,11 +8,14 @@ use MyApp\Catalog\Service\CatalogService;
 use MyApp\Catalog\Service\FilterRebuildJobService;
 use MyApp\Catalog\Service\ProductFilterIndexService;
 use MyApp\Catalog\Service\ProductFilterIndexJobService;
+use MyApp\Catalog\Service\BitmapIndexService;
+use MyApp\Catalog\Service\BitmapIndexJobService;
 use MyApp\Catalog\Service\CatalogSearchIndexService;
 use MyApp\Catalog\Service\CatalogSearchIndexJobService;
 use MyApp\Catalog\Service\ContentPageService;
 use MyApp\Catalog\Service\HomeMainContentService;
 use MyApp\Catalog\Install\CatalogContentIblockInstaller;
+use MyApp\Catalog\Filter\CatalogFilterEngineFactory;
 
 /**
  * @global CUser $USER
@@ -43,7 +46,9 @@ $optCatalogArticlePropertyCode = Assets::OPT_CATALOG_ARTICLE_PROPERTY_CODE;
 $optOffersIblockId = Assets::OPT_OFFERS_IBLOCK_ID;
 $optSkuPropertyCodes = Assets::OPT_SKU_PROPERTY_CODES;
 $optUseProductFilterIndex = Assets::OPT_USE_PRODUCT_FILTER_INDEX;
+$optCatalogFilterEngine = Assets::OPT_CATALOG_FILTER_ENGINE;
 $optProductFilterIndexAdminStepBatch = Assets::OPT_PRODUCT_FILTER_INDEX_ADMIN_STEP_BATCH;
+$optBitmapIndexAdminStepBatch = Assets::OPT_BITMAP_INDEX_ADMIN_STEP_BATCH;
 $optSearchProductPropertyCodes = Assets::OPT_SEARCH_PRODUCT_PROPERTY_CODES;
 $optSearchOfferPropertyCodes = Assets::OPT_SEARCH_OFFER_PROPERTY_CODES;
 $optIndexProductPreviewText = Assets::OPT_INDEX_PRODUCT_PREVIEW_TEXT;
@@ -52,11 +57,13 @@ $optSearchIndexAdminStepBatch = Assets::OPT_CATALOG_SEARCH_INDEX_ADMIN_STEP_BATC
 $optCatalogSearchBackend = Assets::OPT_CATALOG_SEARCH_BACKEND;
 $defaultCatalogIblockId = 2;
 $filterIndexConfigChangedOnSave = false;
+$bitmapIndexConfigChangedOnSave = false;
 $searchIndexConfigChangedOnSave = false;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && check_bitrix_sessid()) {
     $filtersConfigHashBefore = CatalogService::filtersConfigHash();
     $indexConfigHashBefore = ProductFilterIndexService::indexConfigHash();
+    $bitmapConfigHashBefore = BitmapIndexService::indexConfigHash();
     $searchConfigHashBefore = CatalogSearchIndexService::searchConfigHash();
 
     Option::set($moduleId, $optUseBitrixVue, isset($_POST[$optUseBitrixVue]) ? 'Y' : 'N');
@@ -122,11 +129,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && check_bitrix_sessid()) {
     }
     Option::set($moduleId, $optCatalogCacheTtl, (string)$postedCacheTtl);
 
-    if (array_key_exists($optUseProductFilterIndex, $_POST)) {
+    if (array_key_exists($optCatalogFilterEngine, $_POST)) {
+        $postedEngine = trim((string)($_POST[$optCatalogFilterEngine] ?? ''));
+        if (!in_array($postedEngine, [
+            CatalogFilterEngineFactory::ENGINE_LEGACY,
+            CatalogFilterEngineFactory::ENGINE_DENORMALIZED,
+            CatalogFilterEngineFactory::ENGINE_BITMAP,
+        ], true)) {
+            $postedEngine = CatalogFilterEngineFactory::ENGINE_LEGACY;
+        }
+        Option::set($moduleId, $optCatalogFilterEngine, $postedEngine);
+        // Keep legacy flag in sync for old code paths / migration.
         Option::set(
             $moduleId,
             $optUseProductFilterIndex,
-            isset($_POST[$optUseProductFilterIndex]) ? 'Y' : 'N'
+            $postedEngine === CatalogFilterEngineFactory::ENGINE_DENORMALIZED ? 'Y' : 'N'
         );
     }
 
@@ -137,6 +154,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && check_bitrix_sessid()) {
         }
         $postedStepBatch = min(Assets::MAX_PRODUCT_FILTER_INDEX_ADMIN_STEP_BATCH, max(1, $postedStepBatch));
         Option::set($moduleId, $optProductFilterIndexAdminStepBatch, (string)$postedStepBatch);
+    }
+
+    if (array_key_exists($optBitmapIndexAdminStepBatch, $_POST)) {
+        $postedBitmapBatch = (int)($_POST[$optBitmapIndexAdminStepBatch] ?? 0);
+        if ($postedBitmapBatch <= 0) {
+            $postedBitmapBatch = Assets::DEFAULT_BITMAP_INDEX_ADMIN_STEP_BATCH;
+        }
+        $postedBitmapBatch = min(Assets::MAX_BITMAP_INDEX_ADMIN_STEP_BATCH, max(1, $postedBitmapBatch));
+        Option::set($moduleId, $optBitmapIndexAdminStepBatch, (string)$postedBitmapBatch);
     }
 
     if (array_key_exists($optSearchProductPropertyCodes, $_POST)) {
@@ -258,6 +284,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && check_bitrix_sessid()) {
         CatalogService::markFilterSnapshotsForRebuild();
     }
     $filterIndexConfigChangedOnSave = $indexConfigHashBefore !== ProductFilterIndexService::indexConfigHash();
+    $bitmapIndexConfigChangedOnSave = $bitmapConfigHashBefore !== BitmapIndexService::indexConfigHash();
     $searchIndexConfigChangedOnSave = $searchConfigHashBefore !== CatalogSearchIndexService::searchConfigHash();
     if ($searchIndexConfigChangedOnSave) {
         CatalogSearchIndexService::onSearchConfigChanged();
@@ -306,10 +333,18 @@ if ($catalogIblockId <= 0) {
 }
 $useProductFilterIndex = Option::get($moduleId, $optUseProductFilterIndex, 'N') === 'Y';
 $productFilterIndexAdminStepBatch = Assets::productFilterIndexAdminStepBatch();
+$catalogFilterEngine = CatalogFilterEngineFactory::getEngineId();
+$bitmapIndexAdminStepBatch = Assets::bitmapIndexAdminStepBatch();
+$bitmapIndexStatus = BitmapIndexService::getIndexStatus();
+$bitmapIndexInitialProgress = BitmapIndexJobService::getProgressPayload();
 
 $filterJobsAjaxUrl = '/bitrix/admin/myapp_catalog_filter_jobs_ajax.php';
 if (!is_file($_SERVER['DOCUMENT_ROOT'] . $filterJobsAjaxUrl)) {
     $filterJobsAjaxUrl = '/local/modules/myapp.catalog/admin/myapp_catalog_filter_jobs_ajax.php';
+}
+$bitmapJobsAjaxUrl = '/bitrix/admin/myapp_catalog_bitmap_jobs_ajax.php';
+if (!is_file($_SERVER['DOCUMENT_ROOT'] . $bitmapJobsAjaxUrl)) {
+    $bitmapJobsAjaxUrl = '/local/modules/myapp.catalog/admin/myapp_catalog_bitmap_jobs_ajax.php';
 }
 $searchJobsAjaxUrl = '/bitrix/admin/myapp_catalog_search_jobs_ajax.php';
 if (!is_file($_SERVER['DOCUMENT_ROOT'] . $searchJobsAjaxUrl)) {
@@ -333,6 +368,11 @@ $aTabs = [
         'TITLE' => Loc::getMessage('MYAPP_CATALOG_OPT_TAB_INDEX_TITLE'),
     ],
     [
+        'DIV' => 'edit7',
+        'TAB' => Loc::getMessage('MYAPP_CATALOG_OPT_TAB_BITMAP'),
+        'TITLE' => Loc::getMessage('MYAPP_CATALOG_OPT_TAB_BITMAP_TITLE'),
+    ],
+    [
         'DIV' => 'edit4',
         'TAB' => Loc::getMessage('MYAPP_CATALOG_OPT_TAB_SEARCH'),
         'TITLE' => Loc::getMessage('MYAPP_CATALOG_OPT_TAB_SEARCH_TITLE'),
@@ -352,6 +392,8 @@ $aTabs = [
 $tabControl = new CAdminTabControl('tabControl', $aTabs);
 if ((string)($_REQUEST['tabControl_active_tab'] ?? '') === 'edit3') {
     $tabControl->selectedTab = 'edit3';
+} elseif ((string)($_REQUEST['tabControl_active_tab'] ?? '') === 'edit7') {
+    $tabControl->selectedTab = 'edit7';
 } elseif ((string)($_REQUEST['tabControl_active_tab'] ?? '') === 'edit4') {
     $tabControl->selectedTab = 'edit4';
 } elseif ((string)($_REQUEST['tabControl_active_tab'] ?? '') === 'edit5') {
@@ -617,6 +659,8 @@ $tabControl->Begin();
     $tabControl->BeginNextTab();
     include __DIR__ . '/options/filter_index_tab.php';
     $tabControl->BeginNextTab();
+    include __DIR__ . '/options/bitmap_index_tab.php';
+    $tabControl->BeginNextTab();
     include __DIR__ . '/options/search_index_tab.php';
     $tabControl->BeginNextTab();
     include __DIR__ . '/options/content_pages_tab.php';
@@ -632,7 +676,12 @@ $tabControl->Begin();
 <style>
 .adm-workarea .adm-detail-content-table button[data-myapp-job-start],
 .adm-workarea .adm-detail-content-table button[data-myapp-job-cancel],
-.adm-workarea .adm-detail-content-table button[data-myapp-job-clear] {
+.adm-workarea .adm-detail-content-table button[data-myapp-job-clear],
+.adm-workarea .adm-detail-content-table button[data-myapp-bitmap-start],
+.adm-workarea .adm-detail-content-table button[data-myapp-bitmap-cancel],
+.adm-workarea .adm-detail-content-table button[data-myapp-bitmap-clear],
+.adm-workarea .adm-detail-content-table button[data-myapp-bitmap-validate],
+.adm-workarea .adm-detail-content-table button[data-myapp-bitmap-repair] {
     box-sizing: border-box;
     display: inline-block;
     height: 29px;
@@ -652,13 +701,19 @@ $tabControl->Begin();
 }
 .adm-workarea .adm-detail-content-table button[data-myapp-job-start].adm-btn,
 .adm-workarea .adm-detail-content-table button[data-myapp-job-cancel].adm-btn,
-.adm-workarea .adm-detail-content-table button[data-myapp-job-clear].adm-btn {
+.adm-workarea .adm-detail-content-table button[data-myapp-job-clear].adm-btn,
+.adm-workarea .adm-detail-content-table button[data-myapp-bitmap-start].adm-btn,
+.adm-workarea .adm-detail-content-table button[data-myapp-bitmap-cancel].adm-btn,
+.adm-workarea .adm-detail-content-table button[data-myapp-bitmap-clear].adm-btn,
+.adm-workarea .adm-detail-content-table button[data-myapp-bitmap-validate].adm-btn,
+.adm-workarea .adm-detail-content-table button[data-myapp-bitmap-repair].adm-btn {
     border: 1px solid #a9a9a9;
     background: #fff;
     background: linear-gradient(to bottom, #fff 0%, #eaeaea 100%);
     color: #000;
 }
-.adm-workarea .adm-detail-content-table button[data-myapp-job-start].adm-btn-save {
+.adm-workarea .adm-detail-content-table button[data-myapp-job-start].adm-btn-save,
+.adm-workarea .adm-detail-content-table button[data-myapp-bitmap-start].adm-btn-save {
     border: 1px solid #97c004;
     background: #86b814;
     background: linear-gradient(to bottom, #b4e034 0%, #85af27 100%);
@@ -668,11 +723,17 @@ $tabControl->Begin();
 }
 .adm-workarea .adm-detail-content-table button[data-myapp-job-start].adm-btn:hover,
 .adm-workarea .adm-detail-content-table button[data-myapp-job-cancel].adm-btn:hover,
-.adm-workarea .adm-detail-content-table button[data-myapp-job-clear].adm-btn:hover {
+.adm-workarea .adm-detail-content-table button[data-myapp-job-clear].adm-btn:hover,
+.adm-workarea .adm-detail-content-table button[data-myapp-bitmap-start].adm-btn:hover,
+.adm-workarea .adm-detail-content-table button[data-myapp-bitmap-cancel].adm-btn:hover,
+.adm-workarea .adm-detail-content-table button[data-myapp-bitmap-clear].adm-btn:hover,
+.adm-workarea .adm-detail-content-table button[data-myapp-bitmap-validate].adm-btn:hover,
+.adm-workarea .adm-detail-content-table button[data-myapp-bitmap-repair].adm-btn:hover {
     background: #f5f5f5;
     background: linear-gradient(to bottom, #f5f5f5 0%, #dcdcdc 100%);
 }
-.adm-workarea .adm-detail-content-table button[data-myapp-job-start].adm-btn-save:hover {
+.adm-workarea .adm-detail-content-table button[data-myapp-job-start].adm-btn-save:hover,
+.adm-workarea .adm-detail-content-table button[data-myapp-bitmap-start].adm-btn-save:hover {
     background: #9fd022;
     background: linear-gradient(to bottom, #c5eb45 0%, #93bf2b 100%);
 }

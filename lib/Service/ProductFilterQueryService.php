@@ -23,7 +23,7 @@ final class ProductFilterQueryService
     ): array {
         ProductFilterIndexSchema::ensureInfrastructure();
 
-        if (!ProductFilterIndexService::shouldUseIndex() && !($filter['force_index'] ?? false)) {
+        if (!ProductFilterIndexService::isIndexReady() && !($filter['force_index'] ?? false)) {
             throw new \RuntimeException('Product filter index is not ready');
         }
 

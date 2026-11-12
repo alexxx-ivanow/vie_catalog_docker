@@ -2,6 +2,8 @@
 
 Документ описывает **product filter index** — денормализованные таблицы для быстрой выборки **списка товаров** (`/catalog/goods`). Это **не** то же самое, что **снапшоты фильтра** (`FilterAggregateService`), которые питают **блок фильтра в UI** (`/catalog/filters`: доступные значения, min/max цены).
 
+Альтернативный движок listing: [bitmap_filter_index.md](bitmap_filter_index.md) (`catalog_filter_engine=bitmap`). Денормализованный индекс сохраняется; переключение — в настройках модуля.
+
 ---
 
 ## 1. Зачем два слоя
@@ -19,12 +21,12 @@
 
 В [`ProductFilterIndexService`](../lib/Service/ProductFilterIndexService.php):
 
-- **`use_index_option`** — галочка «Использовать индекс для выборки товаров» (`Assets::OPT_USE_PRODUCT_FILTER_INDEX`).
-- **`isIndexReady()`** — option `product_filter_index_ready = Y` **и** `meta.CONFIG_HASH === indexConfigHash()`.
+- **`catalog_filter_engine`** — единый селект на вкладке «Индекс фильтрации»: `legacy` | `denormalized` | `bitmap`.
+- Для denormalized: **`isIndexReady()`** — option `product_filter_index_ready = Y` **и** `meta.CONFIG_HASH === indexConfigHash()`.
 
 **`indexConfigHash()`** = md5( iblock_id + коды свойств фильтра + код артикула + **код типа цены** + **offers iblock id** + **коды SKU-свойств офферов** ). Смена этих настроек без пересборки → индекс **не готов** (`index_config_stale` в админке).
 
-**`shouldUseIndex()`** = option **и** ready. Тогда в [`CatalogService::getGoods()`](../lib/Service/CatalogService.php) (~301) вызывается **`getGoodsViaProductIndex()`** вместо legacy SQL по `b_iblock_element` + `b_iblock_element_property`.
+**`shouldUseIndex()`** = движок `denormalized` **и** ready. Тогда в [`CatalogService::getGoods()`](../lib/Service/CatalogService.php) идёт denormalized path. Инкрементальные обновления denormalized — только при активном `denormalized` (или running job).
 
 Ключ кеша `getGoods` включает **`INDEX_VERSION`** при включённом индексе — после full build кеш списков инвалидируется по версии.
 

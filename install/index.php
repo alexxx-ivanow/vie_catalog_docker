@@ -64,6 +64,7 @@ class myapp_catalog extends CModule
             \MyApp\Catalog\Install\FilterAggregateSchema::ensureTable();
             \MyApp\Catalog\Install\FilterAggregateSchema::ensurePerformanceIndexes();
             \MyApp\Catalog\Install\ProductFilterIndexSchema::ensureInfrastructure();
+            \MyApp\Catalog\Install\BitmapIndexSchema::ensureInfrastructure();
 
             return;
         }
@@ -76,6 +77,7 @@ class myapp_catalog extends CModule
         \MyApp\Catalog\Install\FilterAggregateSchema::ensurePerformanceIndexes();
         \MyApp\Catalog\Install\FilterAggregateSchema::ensureRebuildInfrastructure();
         \MyApp\Catalog\Install\ProductFilterIndexSchema::ensureInfrastructure();
+        \MyApp\Catalog\Install\BitmapIndexSchema::ensureInfrastructure();
         Option::set($this->MODULE_ID, 'filter_aggregate_table_ready', 'Y');
     }
 
@@ -92,6 +94,7 @@ class myapp_catalog extends CModule
 
         \MyApp\Catalog\Install\FilterAggregateSchema::resetInstallFlags();
         \MyApp\Catalog\Install\ProductFilterIndexSchema::resetInstallFlags();
+        \MyApp\Catalog\Install\BitmapIndexSchema::resetInstallFlags();
     }
 
     private function registerInstallAutoload(): void
@@ -103,6 +106,10 @@ class myapp_catalog extends CModule
         $indexSchemaFile = dirname(__DIR__) . '/lib/Install/ProductFilterIndexSchema.php';
         if (is_file($indexSchemaFile)) {
             require_once $indexSchemaFile;
+        }
+        $bitmapSchemaFile = dirname(__DIR__) . '/lib/Install/BitmapIndexSchema.php';
+        if (is_file($bitmapSchemaFile)) {
+            require_once $bitmapSchemaFile;
         }
         $contentFile = dirname(__DIR__) . '/lib/Install/CatalogContentIblockInstaller.php';
         if (is_file($contentFile)) {
@@ -164,6 +171,7 @@ class myapp_catalog extends CModule
         if (\Bitrix\Main\Loader::includeModule($this->MODULE_ID)) {
             \MyApp\Catalog\Service\FilterRebuildJobService::ensureAgentRegistered();
             \MyApp\Catalog\Service\ProductFilterIndexJobService::ensureAgentRegistered();
+            \MyApp\Catalog\Service\BitmapIndexJobService::ensureAgentRegistered();
             \MyApp\Catalog\Service\CatalogSearchIndexJobService::ensureAgentRegistered();
         }
     }
@@ -173,6 +181,7 @@ class myapp_catalog extends CModule
         if (\Bitrix\Main\Loader::includeModule($this->MODULE_ID)) {
             \MyApp\Catalog\Service\FilterRebuildJobService::uninstallAgent();
             \MyApp\Catalog\Service\ProductFilterIndexJobService::uninstallAgent();
+            \MyApp\Catalog\Service\BitmapIndexJobService::uninstallAgent();
             \MyApp\Catalog\Service\CatalogSearchIndexJobService::uninstallAgent();
         }
         if (!\Bitrix\Main\Loader::includeModule($this->MODULE_ID)) {
@@ -201,6 +210,10 @@ class myapp_catalog extends CModule
         if (is_file($ajaxFrom)) {
             copy($ajaxFrom, $toDir . '/myapp_catalog_filter_jobs_ajax.php');
         }
+        $bitmapAjaxFrom = __DIR__ . '/../admin/myapp_catalog_bitmap_jobs_ajax.php';
+        if (is_file($bitmapAjaxFrom)) {
+            copy($bitmapAjaxFrom, $toDir . '/myapp_catalog_bitmap_jobs_ajax.php');
+        }
     }
 
     public function uninstallAdminFiles(): void
@@ -209,6 +222,7 @@ class myapp_catalog extends CModule
         foreach ([
             '/bitrix/admin/myapp_catalog_filter_snapshots.php',
             '/bitrix/admin/myapp_catalog_filter_jobs_ajax.php',
+            '/bitrix/admin/myapp_catalog_bitmap_jobs_ajax.php',
         ] as $rel) {
             $file = $documentRoot . $rel;
             if (is_file($file)) {

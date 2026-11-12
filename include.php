@@ -52,6 +52,26 @@ Loader::registerAutoLoadClasses('myapp.catalog', [
     'MyApp\\Catalog\\Service\\ProductFilterIndexService' => 'lib/Service/ProductFilterIndexService.php',
     'MyApp\\Catalog\\Service\\ProductFilterIndexJobService' => 'lib/Service/ProductFilterIndexJobService.php',
     'MyApp\\Catalog\\Service\\ProductFilterQueryService' => 'lib/Service/ProductFilterQueryService.php',
+    'MyApp\\Catalog\\Install\\BitmapIndexSchema' => 'lib/Install/BitmapIndexSchema.php',
+    'MyApp\\Catalog\\Model\\BitmapProductTable' => 'lib/Model/BitmapProductTable.php',
+    'MyApp\\Catalog\\Model\\BitmapIndexTable' => 'lib/Model/BitmapIndexTable.php',
+    'MyApp\\Catalog\\Model\\BitmapValueDictTable' => 'lib/Model/BitmapValueDictTable.php',
+    'MyApp\\Catalog\\Model\\BitmapMembershipTable' => 'lib/Model/BitmapMembershipTable.php',
+    'MyApp\\Catalog\\Model\\BitmapStatusTable' => 'lib/Model/BitmapStatusTable.php',
+    'MyApp\\Catalog\\Model\\BitmapQueueTable' => 'lib/Model/BitmapQueueTable.php',
+    'MyApp\\Catalog\\Model\\BitmapJobTable' => 'lib/Model/BitmapJobTable.php',
+    'MyApp\\Catalog\\Filter\\CatalogFilterEngineInterface' => 'lib/Filter/CatalogFilterEngineInterface.php',
+    'MyApp\\Catalog\\Filter\\CatalogFilterEngineFactory' => 'lib/Filter/CatalogFilterEngineFactory.php',
+    'MyApp\\Catalog\\Filter\\DenormalizedFilterEngine' => 'lib/Filter/DenormalizedFilterEngine.php',
+    'MyApp\\Catalog\\Filter\\BitmapFilterEngine' => 'lib/Filter/BitmapFilterEngine.php',
+    'MyApp\\Catalog\\Service\\BitmapOperations' => 'lib/Service/BitmapOperations.php',
+    'MyApp\\Catalog\\Service\\BitmapStorage' => 'lib/Service/BitmapStorage.php',
+    'MyApp\\Catalog\\Service\\BitmapProductMapper' => 'lib/Service/BitmapProductMapper.php',
+    'MyApp\\Catalog\\Service\\BitmapIndexQueueService' => 'lib/Service/BitmapIndexQueueService.php',
+    'MyApp\\Catalog\\Service\\BitmapIndexService' => 'lib/Service/BitmapIndexService.php',
+    'MyApp\\Catalog\\Service\\BitmapIndexJobService' => 'lib/Service/BitmapIndexJobService.php',
+    'MyApp\\Catalog\\Service\\BitmapFilterService' => 'lib/Service/BitmapFilterService.php',
+    'MyApp\\Catalog\\Service\\BitmapIndexValidator' => 'lib/Service/BitmapIndexValidator.php',
     'MyApp\\Catalog\\Install\\CatalogSearchIndexSchema' => 'lib/Install/CatalogSearchIndexSchema.php',
     'MyApp\\Catalog\\Install\\CatalogContentIblockInstaller' => 'lib/Install/CatalogContentIblockInstaller.php',
     'MyApp\\Catalog\\Install\\CatalogSiteBootstrapInstaller' => 'lib/Install/CatalogSiteBootstrapInstaller.php',
@@ -79,8 +99,10 @@ Loader::registerAutoLoadClasses('myapp.catalog', [
 \MyApp\Catalog\Event\CatalogCacheHandler::ensurePersistentHandlers();
 \MyApp\Catalog\Install\FilterAggregateSchema::ensureRebuildInfrastructure();
 \MyApp\Catalog\Install\ProductFilterIndexSchema::ensureInfrastructure();
+\MyApp\Catalog\Install\BitmapIndexSchema::ensureInfrastructure();
 \MyApp\Catalog\Install\CatalogSearchIndexSchema::ensureInfrastructure();
 \MyApp\Catalog\Install\CatalogContentIblockInstaller::ensureInfrastructure();
 \MyApp\Catalog\Service\FilterRebuildJobService::ensureAgentRegistered();
 \MyApp\Catalog\Service\ProductFilterIndexJobService::ensureAgentRegistered();
+\MyApp\Catalog\Service\BitmapIndexJobService::ensureAgentRegistered();
 \MyApp\Catalog\Service\CatalogSearchIndexJobService::ensureAgentRegistered();

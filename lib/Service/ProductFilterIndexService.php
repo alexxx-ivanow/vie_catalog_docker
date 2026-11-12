@@ -34,7 +34,9 @@ final class ProductFilterIndexService
 
     public static function useIndexOption(): bool
     {
-        return Option::get(self::MODULE_ID, Assets::OPT_USE_PRODUCT_FILTER_INDEX, 'N') === 'Y';
+        // Derived from catalog_filter_engine (single source of truth).
+        return \MyApp\Catalog\Filter\CatalogFilterEngineFactory::getEngineId()
+            === \MyApp\Catalog\Filter\CatalogFilterEngineFactory::ENGINE_DENORMALIZED;
     }
 
     public static function isIndexReady(): bool
@@ -51,9 +53,23 @@ final class ProductFilterIndexService
         return (string)($meta['CONFIG_HASH'] ?? '') === self::indexConfigHash();
     }
 
+    /** Active denormalized engine for catalog/goods (engine selected + index ready). */
     public static function shouldUseIndex(): bool
     {
         return self::useIndexOption() && self::isIndexReady();
+    }
+
+    /**
+     * Incremental queue/remove for denormalized index: only while it is the active engine
+     * or a denormalized index job is running (admin rebuild of this index).
+     */
+    public static function shouldMaintain(): bool
+    {
+        if (self::useIndexOption()) {
+            return true;
+        }
+
+        return ProductFilterIndexJobService::getRunningJob() !== null;
     }
 
     public static function isIndexConfigStale(): bool

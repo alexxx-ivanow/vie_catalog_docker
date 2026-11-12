@@ -7,15 +7,16 @@
  * @var list<array<string, mixed>> $filterIndexErrors
  * @var string $filterIndexMessage
  * @var string $filterIndexError
- * @var string $optUseProductFilterIndex
+ * @var string $optCatalogFilterEngine
  * @var string $optProductFilterIndexAdminStepBatch
- * @var bool $useProductFilterIndex
+ * @var string $catalogFilterEngine
  * @var int $productFilterIndexAdminStepBatch
  * @var bool $filterIndexConfigChangedOnSave
  */
 
 use Bitrix\Main\Localization\Loc;
 use Bitrix\Main\Type\DateTime;
+use MyApp\Catalog\Filter\CatalogFilterEngineFactory;
 use MyApp\Catalog\Service\ProductFilterIndexJobService;
 
 $filterIndexLang = dirname(__DIR__) . '/lang/' . LANGUAGE_ID . '/admin/filter_index.php';
@@ -30,9 +31,9 @@ if (is_file($cronLang)) {
 if (!isset(
     $filterIndexStatus,
     $filterIndexErrors,
-    $optUseProductFilterIndex,
+    $optCatalogFilterEngine,
     $optProductFilterIndexAdminStepBatch,
-    $useProductFilterIndex,
+    $catalogFilterEngine,
     $productFilterIndexAdminStepBatch
 )) {
     return;
@@ -118,20 +119,22 @@ $indexConfigStaleMessage = $filterIndexConfigChangedOnSave
 <?php endif; ?>
 <tr>
     <td width="50%" class="adm-detail-content-cell-l">
-        <?= Loc::getMessage('MYAPP_CATALOG_FILTER_INDEX_USE') ?>
+        <?= Loc::getMessage('MYAPP_CATALOG_FILTER_INDEX_ENGINE') ?>
         <br>
-        <small><?= Loc::getMessage('MYAPP_CATALOG_FILTER_INDEX_USE_HINT') ?></small>
+        <small><?= Loc::getMessage('MYAPP_CATALOG_FILTER_INDEX_ENGINE_HINT') ?></small>
     </td>
     <td width="50%" class="adm-detail-content-cell-r">
-        <input
-            type="checkbox"
-            class="adm-designed-checkbox"
-            id="MYAPP_CATALOG_USE_PRODUCT_FILTER_INDEX"
-            name="<?= htmlspecialcharsbx($optUseProductFilterIndex) ?>"
-            value="Y"
-            <?= $useProductFilterIndex ? 'checked' : '' ?>
-        >
-        <label class="adm-designed-checkbox-label" for="MYAPP_CATALOG_USE_PRODUCT_FILTER_INDEX"></label>
+        <select name="<?= htmlspecialcharsbx($optCatalogFilterEngine) ?>" id="MYAPP_CATALOG_FILTER_ENGINE">
+            <option value="<?= CatalogFilterEngineFactory::ENGINE_LEGACY ?>" <?= $catalogFilterEngine === CatalogFilterEngineFactory::ENGINE_LEGACY ? 'selected' : '' ?>>
+                <?= htmlspecialcharsbx(Loc::getMessage('MYAPP_CATALOG_FILTER_INDEX_ENGINE_LEGACY')) ?>
+            </option>
+            <option value="<?= CatalogFilterEngineFactory::ENGINE_DENORMALIZED ?>" <?= $catalogFilterEngine === CatalogFilterEngineFactory::ENGINE_DENORMALIZED ? 'selected' : '' ?>>
+                <?= htmlspecialcharsbx(Loc::getMessage('MYAPP_CATALOG_FILTER_INDEX_ENGINE_DENORMALIZED')) ?>
+            </option>
+            <option value="<?= CatalogFilterEngineFactory::ENGINE_BITMAP ?>" <?= $catalogFilterEngine === CatalogFilterEngineFactory::ENGINE_BITMAP ? 'selected' : '' ?>>
+                <?= htmlspecialcharsbx(Loc::getMessage('MYAPP_CATALOG_FILTER_INDEX_ENGINE_BITMAP')) ?>
+            </option>
+        </select>
     </td>
 </tr>
 <tr>

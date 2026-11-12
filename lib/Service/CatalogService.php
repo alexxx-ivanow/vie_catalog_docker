@@ -306,13 +306,14 @@ class CatalogService
 
         // Кеш — включаем sectionId и нормализованный фильтр в ключ.
         ksort($filter);
+        $filterEngineId = \MyApp\Catalog\Filter\CatalogFilterEngineFactory::resolveEngineIdForFilter($filter);
         $cacheKey = md5(
             serialize($filter) . '|' . $page . '|' . $limit . '|' . $sectionId
             . '|' . (Assets::showCatalogFilter() ? '1' : '0')
             . '|' . Assets::catalogPriceTypeCode()
             . '|' . implode(',', Assets::filterPropertyCodes())
             . '|' . self::catalogDisplayCurrency()
-            . '|ix' . (ProductFilterIndexService::shouldUseIndex() ? ProductFilterIndexService::getIndexVersion() : 0)
+            . '|' . \MyApp\Catalog\Filter\CatalogFilterEngineFactory::engineVersionToken($filterEngineId)
         );
         $cache = \Bitrix\Main\Data\Cache::createInstance();
         if (!$skipCache && $cache->initCache(Assets::catalogCacheTtl(), $cacheKey, self::CACHE_DIR_GOODS)) {
@@ -416,7 +417,8 @@ class CatalogService
             }
         }
 
-        if (ProductFilterIndexService::shouldUseIndex()) {
+        $filterEngine = \MyApp\Catalog\Filter\CatalogFilterEngineFactory::createForFilter($filter);
+        if ($filterEngine !== null) {
             return self::getGoodsViaProductIndex(
                 $filter,
                 $page,
@@ -429,7 +431,8 @@ class CatalogService
                 $goodsCacheStarted,
                 $measurePerf,
                 $perf,
-                $perfStartedAt
+                $perfStartedAt,
+                $filterEngine
             );
         }
 
@@ -897,6 +900,7 @@ class CatalogService
         }
 
         ProductFilterIndexQueueService::enqueue($elementId);
+        BitmapIndexQueueService::enqueue($elementId);
         CatalogSearchIndexQueueService::enqueue($elementId);
     }
 
@@ -2773,10 +2777,14 @@ class CatalogService
         bool $goodsCacheStarted,
         bool $measurePerf,
         array &$perf,
-        float $perfStartedAt
+        float $perfStartedAt,
+        ?\MyApp\Catalog\Filter\CatalogFilterEngineInterface $engine = null
     ): array {
         $perf['index_path'] = true;
-        $query = ProductFilterQueryService::queryProductIds($sectionId, $filter, $page, $limit, $perf);
+        $engine ??= new \MyApp\Catalog\Filter\DenormalizedFilterEngine();
+        $engineId = \MyApp\Catalog\Filter\CatalogFilterEngineFactory::resolveEngineIdForFilter($filter);
+        $perf['meta']['filter_engine'] = $engineId;
+        $query = $engine->queryProductIds($sectionId, $filter, $page, $limit, $perf);
         $total = (int)$query['total'];
         $pages = (int)($query['pages'] ?? (int)ceil($total / max(1, $limit)));
         $page = (int)($query['page'] ?? $page);
@@ -2786,7 +2794,9 @@ class CatalogService
         if ($measurePerf) {
             $perf['stages_ms']['list'] = round((microtime(true) - $stageStartedAt) * 1000, 2);
             $perf['meta']['items_count'] = count($items);
-            $perf['meta']['count_mode'] = 'product_index';
+            $perf['meta']['count_mode'] = $engineId === \MyApp\Catalog\Filter\CatalogFilterEngineFactory::ENGINE_BITMAP
+                ? 'bitmap_index'
+                : 'product_index';
         }
 
         $result = [

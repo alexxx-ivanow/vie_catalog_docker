@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Bitmap Index фильтра каталога — логика работы (myapp.catalog)</title>
+    <style>
+        :root {
+            --text: #1a1a1a;
+            --muted: #555;
+            --border: #ddd;
+            --code-bg: #f5f5f7;
+            --accent: #0b57d0;
+        }
+        body {
+            font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.55;
+            color: var(--text);
+            max-width: 52rem;
+            margin: 0 auto;
+            padding: 1.5rem 1.25rem 3rem;
+        }
+        h1 { font-size: 1.75rem; margin-top: 0; }
+        h2 { font-size: 1.25rem; margin-top: 2rem; border-bottom: 1px solid var(--border); padding-bottom: 0.35rem; }
+        h3 { font-size: 1.1rem; margin-top: 1.5rem; }
+        p { margin: 0.75rem 0; }
+        ul, ol { margin: 0.5rem 0 0.75rem; padding-left: 1.35rem; }
+        li { margin: 0.35rem 0; }
+        hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+        strong { font-weight: 600; }
+        code, pre {
+            font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+            font-size: 0.92em;
+        }
+        code {
+            background: var(--code-bg);
+            padding: 0.12em 0.35em;
+            border-radius: 4px;
+        }
+        pre {
+            background: var(--code-bg);
+            padding: 0.75rem 1rem;
+            border-radius: 6px;
+            overflow-x: auto;
+            border: 1px solid var(--border);
+        }
+        a { color: var(--accent); }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.95rem;
+            margin: 1rem 0;
+        }
+        th, td {
+            border: 1px solid var(--border);
+            padding: 0.5rem 0.65rem;
+            text-align: left;
+            vertical-align: top;
+        }
+        th { background: var(--code-bg); font-weight: 600; }
+        .muted { color: var(--muted); font-size: 0.95rem; }
+        .toc { background: #fafafa; border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.25rem; margin: 1.25rem 0; }
+        .toc ul { list-style: none; padding-left: 0; }
+        .toc li { margin: 0.4rem 0; }
+    </style>
+</head>
+<body>
+
+<h1>Bitmap Index фильтра каталога: подробное описание</h1>
+
+<p>Побитовый индекс для быстрой выборки <strong>ID товаров</strong> в <code>GET /vue_catalog/api/v1/catalog/goods</code>. Публичный API и Vue-фронт <strong>не меняются</strong> — меняется только внутренний движок listing при <code>catalog_filter_engine=bitmap</code>.</p>
+
+<p class="muted">Краткая справка в репозитории: <code>bitmap_filter_index.md</code>. См. также денормализованный индекс (<code>product_filter_index.md</code>) и снапшоты UI-фильтра (<code>/catalog/filters</code>).</p>
+
+<div class="toc">
+    <strong>Содержание</strong>
+    <ul>
+        <li><a href="#layers">Два слоя: listing и блок фильтра</a></li>
+        <li><a href="#engines">Три движка listing</a></li>
+        <li><a href="#when-ready">Когда bitmap используется</a></li>
+        <li><a href="#tables">Таблицы и смысл полей</a></li>
+        <li><a href="#glossary">Глоссарий</a></li>
+        <li><a href="#index-build">Построение и инкремент</a></li>
+        <li><a href="#filter-flow">Как обрабатывается запрос фильтра</a></li>
+        <li><a href="#position-resolve">Сопоставление позиций и SQL</a></li>
+        <li><a href="#perf">Замеры (_perf) и сравнение с denormalized</a></li>
+        <li><a href="#admin">Админка и операции</a></li>
+        <li><a href="#reindex">Нужно ли переиндексировать</a></li>
+        <li><a href="#roaring">Roaring (будущее)</a></li>
+        <li><a href="#files">Файлы в коде</a></li>
+    </ul>
+</div>
+
+<hr>
+
+<h2 id="layers">Два слоя: listing и блок фильтра</h2>
+
+<table>
+    <thead>
+        <tr><th>Слой</th><th>Задача</th><th>API</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><strong>Product filter index</strong> (bitmap / denormalized / legacy)</td>
+            <td>Список товаров: section + свойства + цена → <code>total</code> + страница ID</td>
+            <td><code>CatalogService::getGoods()</code></td>
+        </tr>
+        <tr>
+            <td><strong>Filter snapshots</strong> (aggregate)</td>
+            <td>Чекбоксы, min/max цены в боковом фильтре</td>
+            <td><code>CatalogService::getFilters()</code> → <code>myapp_catalog_filter_aggregate</code></td>
+        </tr>
+    </tbody>
+</table>
+
+<p>Bitmap <strong>не подменяет</strong> снапшоты: после смены движка listing всё равно нужны актуальные снапшоты для UI фильтра (отдельная пересборка aggregate).</p>
+
+<hr>
+
+<h2 id="engines">Три движка listing</h2>
+
+<p>На вкладке <strong>«Индекс фильтрации»</strong> — одна опция <code>catalog_filter_engine</code> (активен ровно один):</p>
+
+<table>
+    <thead>
+        <tr><th>Значение</th><th>Поведение</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>legacy</code></td>
+            <td>Прямые SQL по <code>b_iblock_*</code>, свойствам, ценам Bitrix.</td>
+        </tr>
+        <tr>
+            <td><code>denormalized</code></td>
+            <td>Таблицы <code>myapp_catalog_filter_*</code>, <code>ProductFilterQueryService</code> (JOIN по <code>filter_value</code>).</td>
+        </tr>
+        <tr>
+            <td><code>bitmap</code></td>
+            <td>Таблицы <code>myapp_catalog_bitmap_*</code>, <code>BitmapFilterService</code> (побитовые маски + лёгкий SQL по <code>bitmap_products</code>).</td>
+        </tr>
+    </tbody>
+</table>
+
+<p><strong>Фабрика:</strong> <code>CatalogFilterEngineFactory</code>. Совместимость: пустой <code>catalog_filter_engine</code> + старый <code>use_product_filter_index=Y</code> → <code>denormalized</code>.</p>
+
+<p><strong>Инвалидация:</strong> очередь / remove при изменении товара выполняется <strong>только для активного движка</strong> (либо пока идёт job построения этого индекса). Неактивный bitmap не обновляется при правках каталога.</p>
+
+<p><strong>Особый случай:</strong> при активном bitmap параметр <code>?article=</code> ведёт к <strong>fallback на legacy</strong> — артикул в bitmap не индексируется.</p>
+
+<hr>
+
+<h2 id="when-ready">Когда bitmap используется</h2>
+
+<p>В <code>BitmapIndexService</code>:</p>
+<ul>
+    <li><code>shouldUseIndex()</code> = движок <code>bitmap</code> <strong>и</strong> индекс готов.</li>
+    <li>Готовность: опция <code>bitmap_index_ready=Y</code> и <code>meta.CONFIG_HASH === indexConfigHash()</code>.</li>
+    <li><code>indexConfigHash()</code> завязан на iblock, коды свойств фильтра, тип цены, SKU/offers — смена без пересборки → индекс «не готов» / stale в админке.</li>
+</ul>
+
+<p>Ключ кеша <code>getGoods</code> учитывает версию bitmap-индекса — после full build кеш списков сбрасывается по версии.</p>
+
+<hr>
+
+<h2 id="tables">Таблицы и смысл полей</h2>
+
+<table>
+    <thead>
+        <tr><th>Таблица</th><th>Назначение</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>myapp_catalog_bitmap_products</code></td>
+            <td>Один ряд на товар: <code>PRODUCT_ID</code>, <code>BITMAP_POSITION</code> (индекс бита), <code>ACTIVE</code>, <code>SORT</code>, <code>PRICE</code> (мин. цена выбранного типа, как в denormalized).</td>
+        </tr>
+        <tr>
+            <td><code>myapp_catalog_bitmap_index</code></td>
+            <td>Ключ <code>PROPERTY_ID</code> + <code>VALUE_ID</code> → бинарная маска (<code>MEDIUMBLOB</code>): бит N = «товар на позиции N имеет это значение».</td>
+        </tr>
+        <tr>
+            <td><code>myapp_catalog_bitmap_value_dict</code></td>
+            <td>Словарь <code>VALUE_ID</code> для строковых и числовых значений свойств.</td>
+        </tr>
+        <tr>
+            <td><code>myapp_catalog_bitmap_membership</code></td>
+            <td>Текущий набор ключей (property, value) у товара — для инкрементального снятия битов при <code>rebuildProduct</code>.</td>
+        </tr>
+        <tr>
+            <td><code>myapp_catalog_bitmap_status</code></td>
+            <td>Версия, hash конфига, счётчики, статус, <code>MAX_POSITION</code>, длина битового поля.</td>
+        </tr>
+        <tr>
+            <td><code>myapp_catalog_bitmap_queue</code> / <code>_job</code></td>
+            <td>Очередь ID на переиндексацию и фоновые полные пересборки (админка / агент).</td>
+        </tr>
+    </tbody>
+</table>
+
+<h3>Разделы в масках</h3>
+<p><code>PROPERTY_ID = 0</code> — <strong>не</strong> ID свойства инфоблока, а sentinel <code>BitmapStorage::SECTION_PROPERTY_ID</code>; <code>VALUE_ID</code> = <code>SECTION_ID</code>. Обычные свойства фильтра имеют <code>PROPERTY_ID &gt; 0</code> (например MATERIAL = 11).</p>
+
+<hr>
+
+<h2 id="glossary">Глоссарий</h2>
+
+<ul>
+    <li><strong>BITMAP_POSITION</strong> — целое 0…N; у каждого проиндексированного товара своя позиция; это индекс бита во всех масках.</li>
+    <li><strong>Маска (mask)</strong> — бинарная строка длины <code>bit_length</code>; бит на позиции P включён, если товар с <code>BITMAP_POSITION=P</code> попадает под ключ (section или значение свойства).</li>
+    <li><strong>OR внутри свойства</strong> — выбрано несколько значений одного свойства → объединение масок значений.</li>
+    <li><strong>AND между свойствами</strong> — пересечение масок разных свойств.</li>
+    <li><strong>popcount</strong> — число единичных битов в итоговой маске после фильтра (кандидаты до цены в SQL).</li>
+    <li><strong>index path</strong> — <code>getGoods</code> не ходит в legacy SQL по свойствам; <code>bitmap_path: true</code> в <code>_perf</code>.</li>
+</ul>
+
+<hr>
+
+<h2 id="index-build">Построение и инкремент</h2>
+
+<h3>Полная пересборка</h3>
+<ul>
+    <li>Вкладка <strong>«Bitmap Index»</strong> → «Полное построение» (AJAX-шаги).</li>
+    <li>CLI: <code>php local/modules/myapp.catalog/tools/bitmap_index_worker.php --batch=20</code>.</li>
+    <li>Job наполняет очередь порциями; <code>BitmapIndexService::rebuildProduct</code> на каждый ID.</li>
+</ul>
+
+<h3>Один товар (<code>rebuildProduct</code>)</h3>
+<ol>
+    <li>Транзакция; прочитать старую позицию и membership.</li>
+    <li>Если товар неактивен — снять биты, пометить строку в <code>bitmap_products</code> неактивной.</li>
+    <li>Иначе: выделить/сохранить <code>BITMAP_POSITION</code>, <code>clearBits</code> по старым ключам.</li>
+    <li>Собрать новые ключи (разделы + значения свойств фильтра); для каждого <code>setProductBit</code> в соответствующую маску.</li>
+    <li>Обновить <code>bitmap_products</code> (PRICE через ту же логику, что у denormalized).</li>
+    <li>Увеличить soft version индекса.</li>
+</ol>
+
+<h3>Шаг в админке</h3>
+<p>Поле «Товаров за один HTTP‑запрос» — от 1 до <strong>120</strong> (как на вкладке «Индекс фильтрации»). Агент/cron использует отдельную опцию <code>bitmap_index_batch_size</code> (потолок 100).</p>
+
+<hr>
+
+<h2 id="filter-flow">Как обрабатывается запрос фильтра</h2>
+
+<p>Точка входа: <code>BitmapFilterService::queryProductIds</code> ← <code>CatalogService::getGoods</code>.</p>
+
+<ol>
+    <li><strong>Поддерево раздела</strong> — список <code>SECTION_ID</code> (perf: <code>bitmap_section_ids</code>).</li>
+    <li><strong>Маска раздела</strong> — OR масок всех разделов поддерева (perf: <code>bitmap_section_or</code>).</li>
+    <li><strong>Маски свойств</strong> — для каждого выбранного свойства OR по значениям, затем AND между свойствами (perf: <code>bitmap_props_and_or</code>).</li>
+    <li><strong>Пересечение</strong> — AND маски раздела и маски свойств (если заданы).</li>
+    <li><strong>Итерация битов</strong> — список <code>BITMAP_POSITION</code> кандидатов (perf: <code>bitmap_iterate_bits</code>, <code>meta.bitmap_popcount</code>).</li>
+    <li><strong>Total</strong> — кеш <code>CACHE_DIR_GOODS_COUNT</code> или SQL count по <code>bitmap_products</code> с фильтром цены (perf: <code>bitmap_goods_count</code>).</li>
+    <li><strong>Страница</strong> — SQL list с <code>ORDER BY</code> (sort/name/price) + <code>LIMIT</code> (perf: <code>bitmap_goods_list</code>).</li>
+    <li><strong>Карточки</strong> — <code>goods_list_details</code> по 12 ID (как у других движков).</li>
+</ol>
+
+<p>Логика свойств:</p>
+<ul>
+    <li>типы: enum (L), string (S) — точное совпадение, number (N) — точное;</li>
+    <li>multiple — бит выставляется в маске каждого значения;</li>
+    <li>цена <code>price_from</code> / <code>price_to</code> и сортировка по цене — по колонке <code>p.PRICE</code> в <code>bitmap_products</code>, без join к <code>b_catalog_price</code> на этапе фильтра.</li>
+</ul>
+
+<hr>
+
+<h2 id="position-resolve">Сопоставление позиций и SQL</h2>
+
+<p>После масок в PHP остаётся ограничить SQL по списку позиций (или сканировать всех активных, если маски фильтра не задавали сужение).</p>
+
+<table>
+    <thead>
+        <tr><th><code>bitmap_popcount</code></th><th><code>meta.bitmap_id_resolve</code></th><th>Поведение</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td>≤ 512</td>
+            <td><code>position_in</code></td>
+            <td><code>BITMAP_POSITION IN (...)</code> в WHERE.</td>
+        </tr>
+        <tr>
+            <td>&gt; 512</td>
+            <td><code>position_temp</code></td>
+            <td><code>CREATE TEMPORARY TABLE</code> (MEMORY), пакетный INSERT позиций, <code>INNER JOIN</code> в count и list; perf: <code>bitmap_positions_temp</code>.</td>
+        </tr>
+        <tr>
+            <td>без сужающей маски</td>
+            <td><code>full_scan_active</code></td>
+            <td>Все активные товары в <code>bitmap_products</code> (редко на реальном фильтре).</td>
+        </tr>
+    </tbody>
+</table>
+
+<p>Порог в коде: <code>POSITION_IN_THRESHOLD = 512</code> (<code>BitmapFilterService</code>). Цель — не слать в MySQL два запроса с тысячами литералов в <code>IN</code>.</p>
+
+<hr>
+
+<h2 id="perf">Замеры (_perf) и сравнение с denormalized</h2>
+
+<p>Как у других движков:</p>
+<pre>GET /vue_catalog/api/v1/catalog/goods?section=33&amp;...&amp;perf=1&amp;skip_cache=1</pre>
+
+<p>В ответе:</p>
+<ul>
+    <li><code>meta.filter_engine=bitmap</code>, <code>meta.count_mode=bitmap_index</code>, <code>bitmap_path=true</code>;</li>
+    <li><code>index_query_ms</code> — время индексной части;</li>
+    <li><code>stages_ms.list</code> — в основном сборка карточек, не второй тяжёлый SQL listing.</li>
+</ul>
+
+<p><strong>Типичный сложный фильтр</strong> (несколько свойств + цена): denormalized часто упирается в <code>index_goods_count</code> (~секунда <code>COUNT(DISTINCT)</code> с JOIN); bitmap — ~десятки ms на маски + умеренный SQL по <code>bitmap_products</code>. Итоговое время страницы всё равно включает ~150–200 ms на карточки.</p>
+
+<p>CLI:</p>
+<ul>
+    <li><code>tools/compare_filter_query.php --section=ID --engine=bitmap</code> — сравнение ID с legacy/denormalized;</li>
+    <li><code>tools/bench_filter_engines.php --section=ID</code> — бенч трёх движков.</li>
+</ul>
+
+<hr>
+
+<h2 id="admin">Админка и операции</h2>
+
+<ul>
+    <li><strong>Вкладка «Bitmap Index»</strong> — статистика, batch, полное построение, остановка, очистка.</li>
+    <li><strong>Проверить / repair</strong> — <code>BitmapIndexValidator</code>.</li>
+    <li><strong>Переключение движка</strong> — только на «Индекс фильтрации»; на вкладке Bitmap показывается активный движок.</li>
+</ul>
+
+<hr>
+
+<h2 id="reindex">Нужно ли переиндексировать</h2>
+
+<p><strong>После правок только чтения/запросов</strong> (temp table вместо <code>IN</code>, лимиты batch в админке, CSS) — <strong>полная пересборка не нужна</strong>: маски и <code>bitmap_products</code> не меняются.</p>
+
+<p><strong>Пересборка нужна</strong>, если:</p>
+<ul>
+    <li>изменился <code>indexConfigHash()</code> (свойства фильтра, iblock, цена, SKU);</li>
+    <li>индекс не готов / stale в админке;</li>
+    <li>была очистка или repair с пересборкой;</li>
+    <li>validator показал расхождения.</li>
+</ul>
+
+<hr>
+
+<h2 id="roaring">Roaring (будущее)</h2>
+
+<p>Сжатие Roaring <strong>не подключено</strong>. Сейчас — plain binary в <code>MEDIUMBLOB</code>. Переоценка — по <code>blob_bytes</code> и памяти на 100k+ товаров после <code>bench_filter_engines.php</code>.</p>
+
+<hr>
+
+<h2 id="files">Файлы в коде</h2>
+
+<table>
+    <thead>
+        <tr><th>Что</th><th>Файл</th></tr>
+    </thead>
+    <tbody>
+        <tr><td>Схема таблиц</td><td><code>lib/Install/BitmapIndexSchema.php</code></td></tr>
+        <tr><td>Построение / rebuildProduct</td><td><code>lib/Service/BitmapIndexService.php</code></td></tr>
+        <tr><td>Маски read/write</td><td><code>lib/Service/BitmapStorage.php</code>, <code>BitmapOperations.php</code></td></tr>
+        <tr><td>Запрос listing</td><td><code>lib/Service/BitmapFilterService.php</code></td></tr>
+        <tr><td>Выбор движка</td><td><code>lib/Filter/CatalogFilterEngineFactory.php</code></td></tr>
+        <tr><td>getGoods, кеш, perf</td><td><code>lib/Service/CatalogService.php</code></td></tr>
+        <tr><td>Jobs / очередь</td><td><code>BitmapIndexJobService.php</code>, <code>BitmapIndexQueueService.php</code></td></tr>
+        <tr><td>Целостность</td><td><code>BitmapIndexValidator.php</code></td></tr>
+    </tbody>
+</table>
+
+</body>
+</html>

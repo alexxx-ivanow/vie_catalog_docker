@@ -2,19 +2,19 @@
 
 use Bitrix\Main\Config\Option;
 use Bitrix\Main\Loader;
+use MyApp\Catalog\Config\Assets;
+use MyApp\Catalog\Filter\CatalogFilterEngineFactory;
+use MyApp\Catalog\Service\BitmapFilterService;
+use MyApp\Catalog\Service\CatalogService;
+use MyApp\Catalog\Service\ProductFilterQueryService;
 
 /**
- * Сравнение ID товаров: legacy getGoods vs ProductFilterQueryService (§13 QA).
+ * Сравнение ID товаров: legacy vs denormalized vs bitmap.
  *
  * Usage:
  *   php local/modules/myapp.catalog/tools/compare_filter_query.php --section=123
+ *   php ... --section=123 --engine=bitmap
  *   php ... --section=123 --price_from=100 --price_to=5000
- *
- * Checklist before prod flag use_product_filter_index:
- * 1. Full index built, CONFIG_HASH matches, index_ready=Y
- * 2. This script: symmetric diff = 0 for key sections and filter combos
- * 3. AJAX catalog/goods?skip_cache=1&perf=1 — compare sql_time_ms / sql_count cold vs legacy
- * 4. Scenarios: section only, 2–3 props AND, multi-value OR, price range, sort, pagination page 2
  */
 
 $_SERVER['DOCUMENT_ROOT'] = realpath(__DIR__ . '/../../../../..');
@@ -27,11 +27,14 @@ if (!Loader::includeModule('myapp.catalog')) {
 
 $sectionId = 0;
 $sort = 'default';
+$engine = 'denormalized';
 foreach ($argv as $arg) {
     if (str_starts_with($arg, '--section=')) {
         $sectionId = (int)substr($arg, 10);
     } elseif (str_starts_with($arg, '--sort=')) {
         $sort = substr($arg, 7);
+    } elseif (str_starts_with($arg, '--engine=')) {
+        $engine = substr($arg, 9);
     } elseif (str_starts_with($arg, '--price_from=')) {
         $priceFrom = substr($arg, 13);
     } elseif (str_starts_with($arg, '--price_to=')) {
@@ -47,6 +50,7 @@ if ($sectionId <= 0) {
 $filter = [
     'properties' => [],
     'force_index' => true,
+    'force_bitmap' => true,
     'sort' => $sort,
 ];
 if (isset($priceFrom)) {
@@ -59,20 +63,17 @@ if (isset($priceTo)) {
 $_REQUEST['skip_cache'] = '1';
 
 $moduleId = 'myapp.catalog';
-$useOpt = \MyApp\Catalog\Config\Assets::OPT_USE_PRODUCT_FILTER_INDEX;
+$prevEngine = Option::get($moduleId, Assets::OPT_CATALOG_FILTER_ENGINE, '');
+$useOpt = Assets::OPT_USE_PRODUCT_FILTER_INDEX;
 $prevUse = Option::get($moduleId, $useOpt, 'N');
+Option::set($moduleId, Assets::OPT_CATALOG_FILTER_ENGINE, CatalogFilterEngineFactory::ENGINE_LEGACY);
 Option::set($moduleId, $useOpt, 'N');
 
 $legacyIds = [];
 $page = 1;
 $pages = 1;
 do {
-    $goods = \MyApp\Catalog\Service\CatalogService::getGoods(
-        $filter,
-        $page,
-        500,
-        $sectionId
-    );
+    $goods = CatalogService::getGoods($filter, $page, 500, $sectionId);
     foreach ($goods['items'] as $item) {
         $legacyIds[] = (int)$item['ID'];
     }
@@ -81,14 +82,32 @@ do {
 } while ($page <= $pages);
 
 Option::set($moduleId, $useOpt, $prevUse);
+Option::set($moduleId, Assets::OPT_CATALOG_FILTER_ENGINE, $prevEngine);
 
-$indexResult = \MyApp\Catalog\Service\ProductFilterQueryService::queryProductIds(
-    $sectionId,
-    $filter,
-    1,
-    max(1, count($legacyIds) ?: 50000),
-    $perf
-);
+$perf = [];
+try {
+    if ($engine === 'bitmap') {
+        $indexResult = BitmapFilterService::queryProductIds(
+            $sectionId,
+            $filter,
+            1,
+            max(1, count($legacyIds) ?: 50000),
+            $perf
+        );
+    } else {
+        $indexResult = ProductFilterQueryService::queryProductIds(
+            $sectionId,
+            $filter,
+            1,
+            max(1, count($legacyIds) ?: 50000),
+            $perf
+        );
+    }
+} catch (\Throwable $e) {
+    fwrite(STDERR, $engine . ' query failed: ' . $e->getMessage() . "\n");
+    exit(1);
+}
+
 $indexIds = array_map('intval', $indexResult['product_ids'] ?? []);
 
 $legacySet = array_fill_keys($legacyIds, true);
@@ -98,6 +117,7 @@ $onlyIndex = array_keys(array_diff_key($indexSet, $legacySet));
 
 $out = [
     'section_id' => $sectionId,
+    'engine' => $engine,
     'legacy_total' => count($legacyIds),
     'index_total' => (int)($indexResult['total'] ?? count($indexIds)),
     'legacy_ids_count' => count($legacyIds),
