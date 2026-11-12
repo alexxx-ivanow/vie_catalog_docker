@@ -57,6 +57,8 @@ try {
             ]);
 
         case 'start':
+            @set_time_limit(0);
+            @ignore_user_abort(true);
             BitmapIndexService::buildFullIndex();
             $respond([
                 'ok' => true,
@@ -65,6 +67,8 @@ try {
             ]);
 
         case 'step':
+            @set_time_limit(0);
+            @ignore_user_abort(true);
             $batch = (int)($_POST['batch'] ?? Assets::bitmapIndexAdminStepBatch());
             $batch = max(1, min(Assets::MAX_BITMAP_INDEX_ADMIN_STEP_BATCH, $batch));
             $processed = BitmapIndexJobService::runStep($batch);

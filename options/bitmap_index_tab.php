@@ -250,13 +250,30 @@ foreach ($statLabels as $key => $msgKey): ?>
     var progressBar = root.querySelector('.myapp-bitmap-job-progress__bar');
     var progressLabel = root.querySelector('.myapp-bitmap-job-progress__label');
     var keepTab = document.querySelector('[data-myapp-bitmap-keep-tab]');
-    var pollTimer = null;
+    var stepDelayMs = 400;
+    var stepBatchMax = <?= (int)\MyApp\Catalog\Config\Assets::MAX_BITMAP_INDEX_ADMIN_STEP_BATCH ?>;
+    var ajaxHttpError = <?= json_encode(Loc::getMessage('MYAPP_CATALOG_BITMAP_INDEX_AJAX_HTTP_ERROR')) ?>;
+    var polling = false;
+    var loopTimer = null;
+    var stepInFlight = false;
 
     function showMessage(text, isError) {
         if (!messageEl) return;
         messageEl.style.display = text ? '' : 'none';
         messageEl.textContent = text || '';
         messageEl.style.color = isError ? '#c00' : '#070';
+    }
+
+    function getEffectiveBatch() {
+        var batchInput = document.querySelector('[data-myapp-bitmap-step-batch]');
+        if (!batchInput) {
+            return 20;
+        }
+        var parsed = parseInt(String(batchInput.value || ''), 10);
+        if (Number.isNaN(parsed)) {
+            return 20;
+        }
+        return Math.min(stepBatchMax, Math.max(1, parsed));
     }
 
     function post(action, extra) {
@@ -266,12 +283,22 @@ foreach ($statLabels as $key => $msgKey): ?>
         if (extra) {
             Object.keys(extra).forEach(function (k) { body.append(k, extra[k]); });
         }
-        var batchInput = document.querySelector('[data-myapp-bitmap-step-batch]');
-        if (batchInput && batchInput.value) {
-            body.append('batch', batchInput.value);
+        if (action === 'step') {
+            body.append('batch', String(getEffectiveBatch()));
         }
         return fetch(ajaxUrl, { method: 'POST', body: body, credentials: 'same-origin' })
-            .then(function (r) { return r.json(); });
+            .then(function (response) {
+                return response.text().then(function (text) {
+                    if (!response.ok) {
+                        throw new Error(ajaxHttpError + ' (HTTP ' + response.status + ')');
+                    }
+                    try {
+                        return JSON.parse(text);
+                    } catch (e) {
+                        throw new Error(ajaxHttpError);
+                    }
+                });
+            });
     }
 
     function applyStats(stats) {
@@ -300,32 +327,66 @@ foreach ($statLabels as $key => $msgKey): ?>
         }
         var cancelBtn = document.querySelector('[data-myapp-bitmap-cancel]');
         if (cancelBtn) cancelBtn.disabled = !active;
-        if (active && !pollTimer) {
-            pollTimer = setInterval(function () {
-                post('step').then(function (data) {
-                    if (!data.ok) {
-                        showMessage(data.error || 'error', true);
-                        return;
-                    }
-                    applyProgress(data.progress);
-                    applyStats(data.stats);
-                    if (data.progress && data.progress.finished) {
-                        clearInterval(pollTimer);
-                        pollTimer = null;
-                        showMessage(<?= json_encode(Loc::getMessage('MYAPP_CATALOG_BITMAP_INDEX_SAVED')) ?>, false);
-                    }
-                }).catch(function (e) {
-                    showMessage(String(e), true);
-                });
-            }, 800);
-        }
-        if (!active && pollTimer) {
-            clearInterval(pollTimer);
-            pollTimer = null;
+    }
+
+    function stopLoop() {
+        polling = false;
+        if (loopTimer !== null) {
+            clearTimeout(loopTimer);
+            loopTimer = null;
         }
     }
 
+    function scheduleStep() {
+        if (!polling || stepInFlight) {
+            return;
+        }
+        loopTimer = setTimeout(runStep, stepDelayMs);
+    }
+
+    function runStep() {
+        if (!polling || stepInFlight) {
+            return;
+        }
+        loopTimer = null;
+        stepInFlight = true;
+        post('step')
+            .then(function (data) {
+                if (!data.ok) {
+                    throw new Error(data.error || 'error');
+                }
+                applyProgress(data.progress);
+                applyStats(data.stats);
+                var progress = data.progress || {};
+                if (progress.active && !progress.finished) {
+                    stepInFlight = false;
+                    scheduleStep();
+                    return;
+                }
+                stopLoop();
+                stepInFlight = false;
+                if (progress.finished || progress.status === 'completed') {
+                    showMessage(<?= json_encode(Loc::getMessage('MYAPP_CATALOG_BITMAP_INDEX_SAVED')) ?>, false);
+                }
+            })
+            .catch(function (e) {
+                stepInFlight = false;
+                stopLoop();
+                showMessage(e.message || String(e), true);
+            });
+    }
+
+    function startLoop() {
+        if (polling) {
+            return;
+        }
+        polling = true;
+        showMessage('', false);
+        runStep();
+    }
+
     document.querySelector('[data-myapp-bitmap-start="full"]')?.addEventListener('click', function () {
+        stopLoop();
         post('start').then(function (data) {
             if (!data.ok) {
                 showMessage(data.error || 'error', true);
@@ -333,17 +394,18 @@ foreach ($statLabels as $key => $msgKey): ?>
             }
             applyProgress(data.progress);
             applyStats(data.stats);
-            applyProgress({ active: true, percent: 0, processed: 0, total: data.progress?.total || 0 });
-            post('step').then(function (stepData) {
-                applyProgress(stepData.progress);
-                applyStats(stepData.stats);
-            });
+            startLoop();
+        }).catch(function (e) {
+            showMessage(e.message || String(e), true);
         });
     });
     document.querySelector('[data-myapp-bitmap-cancel]')?.addEventListener('click', function () {
+        stopLoop();
         post('cancel').then(function (data) {
             applyProgress(data.progress);
             applyStats(data.stats);
+        }).catch(function (e) {
+            showMessage(e.message || String(e), true);
         });
     });
     document.querySelector('[data-myapp-bitmap-clear]')?.addEventListener('click', function () {
@@ -355,6 +417,8 @@ foreach ($statLabels as $key => $msgKey): ?>
             }
             applyStats(data.stats);
             showMessage(<?= json_encode(Loc::getMessage('MYAPP_CATALOG_BITMAP_INDEX_SAVED')) ?>, false);
+        }).catch(function (e) {
+            showMessage(e.message || String(e), true);
         });
     });
     document.querySelector('[data-myapp-bitmap-validate]')?.addEventListener('click', function () {
@@ -367,6 +431,8 @@ foreach ($statLabels as $key => $msgKey): ?>
             var text = report.ok ? 'OK' : (report.issues || []).join('; ');
             showMessage(text || 'OK', !report.ok);
             applyStats(data.stats);
+        }).catch(function (e) {
+            showMessage(e.message || String(e), true);
         });
     });
     document.querySelector('[data-myapp-bitmap-repair]')?.addEventListener('click', function () {
@@ -375,9 +441,10 @@ foreach ($statLabels as $key => $msgKey): ?>
             applyProgress(data.progress);
             applyStats(data.stats);
             if (data.ok && data.progress && data.progress.active) {
-                applyProgress(data.progress);
-                post('step');
+                startLoop();
             }
+        }).catch(function (e) {
+            showMessage(e.message || String(e), true);
         });
     });
 
@@ -388,6 +455,7 @@ foreach ($statLabels as $key => $msgKey): ?>
             processed: <?= (int)$jobProcessed ?>,
             total: <?= (int)$jobTotal ?>
         });
+        startLoop();
     }
 })();
 </script>
