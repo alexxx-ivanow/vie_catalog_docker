@@ -34,7 +34,13 @@ $jsonPageFlags = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
 
-    <link rel="stylesheet" href="/local/templates/assets/css/style.css">
+    <style><?php
+        // Критичный CSS первого экрана инлайнится в <head>, полный style.css ниже грузится асинхронно (PageSpeed: render-blocking)
+        $criticalCss = \Bitrix\Main\Application::getDocumentRoot() . '/local/templates/assets/css/critical.css';
+        echo is_file($criticalCss) ? file_get_contents($criticalCss) : '';
+    ?></style>
+    <link rel="preload" href="/local/templates/assets/css/style.css" as="style" onload="this.rel='stylesheet'">
+    <noscript><link rel="stylesheet" href="/local/templates/assets/css/style.css"></noscript>
 
     <title><?= htmlspecialcharsbx($pageTitle) ?></title>
     <?php if ($metaDescription !== ''): ?>
