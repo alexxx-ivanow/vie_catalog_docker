@@ -88,7 +88,7 @@ export default {
             }
 
             if (nextQuantity < 1) {
-                return this.removeItem(item);
+                return;               
             }
 
             if (this.updatingId === item.id) {
@@ -156,7 +156,7 @@ export default {
         decreaseQuantity(item) {
             const quantity = this.itemQuantity(item);
             if (quantity <= 1) {
-                this.removeItem(item);
+                //this.removeItem(item);
                 return;
             }
             this.updateQuantity(item, quantity - 1);

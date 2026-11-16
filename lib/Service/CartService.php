@@ -204,8 +204,13 @@ class CartService
         Loader::includeModule('sale');
         Loader::includeModule('catalog');
 
-        if ($quantity < 1) {
-            return self::removeItem($basketItemId);
+        if ($quantity < 1) {            
+            return [
+                'success' => false,
+                'error' => 'Количество товара не может быть меньше 1',
+                'items' => [],
+                'totals' => self::emptyTotals(),
+            ];
         }
 
         $basket = self::loadBasket();
