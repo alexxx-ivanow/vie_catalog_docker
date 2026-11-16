@@ -185,9 +185,10 @@ class myapp_catalog extends CModule
             \MyApp\Catalog\Service\CatalogSearchIndexJobService::uninstallAgent();
         }
         if (!\Bitrix\Main\Loader::includeModule($this->MODULE_ID)) {
-            \Bitrix\Main\Loader::registerAutoLoadClasses($this->MODULE_ID, [
-                'MyApp\\Catalog\\Event\\CatalogCacheHandler' => 'lib/Event/CatalogCacheHandler.php',
-            ]);
+            \Bitrix\Main\Loader::registerNamespace(
+                'MyApp\\Catalog',
+                __DIR__ . '/../lib'
+            );
         }
 
         if (class_exists(\MyApp\Catalog\Event\CatalogCacheHandler::class)) {
