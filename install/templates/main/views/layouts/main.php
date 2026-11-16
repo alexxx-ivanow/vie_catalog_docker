@@ -62,7 +62,12 @@ $jsonPageFlags = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
             <div id="app-site-search"></div>
             <a href="/" class="site-nav__link">Главная</a>
             <a href="/catalog/" class="site-nav__link">Каталог</a>
-            <div id="app-site-header"></div>
+            <div id="app-site-header" aria-busy="true">
+                <div class="site-header-nav-placeholder" aria-hidden="true">
+                    <span class="site-header-nav-placeholder__item site-header-nav-placeholder__item--cabinet"></span>
+                    <span class="site-header-nav-placeholder__item site-header-nav-placeholder__item--cart"></span>
+                </div>
+            </div>
         </nav>
     </div>
 </header>

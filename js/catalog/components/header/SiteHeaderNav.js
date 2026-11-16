@@ -68,6 +68,11 @@ export default {
         if (params.get('auth') === '1' && !this.isAuthorized) {
             this.loginOpen = true;
         }
+
+        const mountRoot = this.$el?.parentElement;
+        if (mountRoot?.id === 'app-site-header') {
+            mountRoot.removeAttribute('aria-busy');
+        }
     },
     beforeUnmount() {
         if (this.onCartCount) {
