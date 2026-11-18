@@ -379,32 +379,35 @@ export default {
                     </div>
 
                     <div class="catalog-page__toolbar">
-                        <label
-                            v-if="store.filterEnabled"
-                            for="catalog-filter-drawer"
-                            class="catalog-filter-drawer__open"
-                        >
-                            <span class="catalog-filter-drawer__open-text">Фильтр</span>
-                            <span
+                        <div v-if="store.filterEnabled" class="catalog-page__toolbar-filters">
+                            <label
+                                for="catalog-filter-drawer"
+                                class="catalog-filter-drawer__open"
+                            >
+                                <span class="catalog-filter-drawer__open-text">Фильтр</span>
+                                <span
+                                    v-if="activeFilterCount > 0"
+                                    class="catalog-filter-drawer__open-count"
+                                    :aria-label="'Выбрано фильтров: ' + activeFilterCount"
+                                >{{ activeFilterCount }}</span>
+                            </label>
+                            <button
                                 v-if="activeFilterCount > 0"
-                                class="catalog-filter-drawer__open-count"
-                                :aria-label="'Выбрано фильтров: ' + activeFilterCount"
-                            >{{ activeFilterCount }}</span>
-                        </label>
-                        <button
-                            v-if="store.filterEnabled && activeFilterCount > 0"
-                            type="button"
-                            class="catalog-filter-drawer__reset"
-                            :disabled="store.loading"
-                            @click="resetFilter"
-                        >Сбросить фильтр</button>
-                        <span v-if="store.loading" class="catalog-skeleton-line catalog-skeleton-line--toolbar" aria-hidden="true"></span>
-                        <span v-else class="catalog-page__toolbar-count">Найдено: {{ store.total }}</span>
-                        <CatalogSortSelect
-                            :model-value="store.sort"
-                            :disabled="store.loading"
-                            @update:model-value="onSortChange"
-                        />
+                                type="button"
+                                class="catalog-filter-drawer__reset"
+                                :disabled="store.loading"
+                                @click="resetFilter"
+                            >Сбросить фильтр</button>
+                        </div>
+                        <div class="catalog-page__toolbar-meta">
+                            <span v-if="store.loading" class="catalog-skeleton-line catalog-skeleton-line--toolbar" aria-hidden="true"></span>
+                            <span v-else class="catalog-page__toolbar-count">Найдено: {{ store.total }}</span>
+                            <CatalogSortSelect
+                                :model-value="store.sort"
+                                :disabled="store.loading"
+                                @update:model-value="onSortChange"
+                            />
+                        </div>
                     </div>
 
                     <div v-if="store.loading" class="catalog_list" aria-busy="true" aria-label="Загрузка товаров">

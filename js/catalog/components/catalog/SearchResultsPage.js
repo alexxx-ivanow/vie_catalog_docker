@@ -208,16 +208,18 @@ export default {
                 </div>
 
                 <div class="catalog-page__toolbar">
-                    <span v-if="loading" class="catalog-skeleton-line catalog-skeleton-line--toolbar" aria-hidden="true"></span>
-                    <span v-else class="catalog-page__toolbar-count">
-                        <template v-if="query">Найдено: {{ total }}</template>
-                        <template v-else>Введите запрос</template>
-                    </span>
-                    <CatalogSortSelect
-                        :model-value="sort"
-                        :disabled="loading || !query"
-                        @update:model-value="onSortChange"
-                    />
+                    <div class="catalog-page__toolbar-meta">
+                        <span v-if="loading" class="catalog-skeleton-line catalog-skeleton-line--toolbar" aria-hidden="true"></span>
+                        <span v-else class="catalog-page__toolbar-count">
+                            <template v-if="query">Найдено: {{ total }}</template>
+                            <template v-else>Введите запрос</template>
+                        </span>
+                        <CatalogSortSelect
+                            :model-value="sort"
+                            :disabled="loading || !query"
+                            @update:model-value="onSortChange"
+                        />
+                    </div>
                 </div>
 
                 <div v-if="loading" class="catalog_list" aria-busy="true">

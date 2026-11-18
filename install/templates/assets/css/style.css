@@ -1318,8 +1318,25 @@ img {
     margin-bottom: 16px;
 }
 
+.catalog-page__toolbar-filters {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 0 1 auto;
+}
+
+.catalog-page__toolbar-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
 .catalog-page__toolbar-count {
     flex: 1 1 auto;
+    min-width: 0;
 }
 
 .catalog__select {
@@ -2229,6 +2246,32 @@ img {
         flex-direction: column;
     }
 
+    .catalog-page__toolbar {
+        flex-direction: column;
+        align-items: stretch;
+        max-width: 320px;
+    }
+
+    .catalog-page__toolbar-filters,
+    .catalog-page__toolbar-meta {
+        width: 100%;
+    }
+
+    .catalog-page__toolbar-filters {
+        justify-content: space-between;
+    }
+
+    .catalog-page__toolbar-meta {
+        flex-wrap: nowrap;
+    }
+
+    .catalog-page__toolbar-meta .catalog__select {
+        flex: 0 1 auto;
+        min-width: 0;
+        width: auto;
+        max-width: min(200px, 52vw);
+    }
+
     .catalog-filter-drawer__open {
         display: inline-flex;
         align-items: center;
@@ -2265,7 +2308,8 @@ img {
 
     .catalog-filter-drawer__reset {
         display: inline-block;
-        flex-basis: 100%;
+        flex: 0 0 auto;
+        margin-left: 4px;
         padding: 4px 0;
         background: none;
         border: none;
@@ -2379,7 +2423,7 @@ img {
     }
 
     .catalog_list:not(.product_detail_wrap) {
-        grid-template-columns: repeat(auto-fill, minmax(174px, 1fr));
+        grid-template-columns: repeat(3, minmax(0, 1fr));
         gap: 16px;
     }
 
@@ -2582,6 +2626,30 @@ img {
     padding: 24px;
     text-align: center;
     color: var(--color-text-muted);
+}
+
+@media (max-width: 719px) {
+    .catalog_list:not(.product_detail_wrap) {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 420px) {
+    .catalog_list:not(.product_detail_wrap) {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+@media (max-width: 400px) {
+    .catalog-page__toolbar-meta {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .catalog-page__toolbar-meta .catalog__select {
+        width: 100%;
+        max-width: 100%;
+    }
 }
 
 @media (max-width: 767px) {
